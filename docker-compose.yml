@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: oworkly_lms_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oworkly_lms
+      POSTGRES_USER: oworkly
+      POSTGRES_PASSWORD: oworkly_dev_pw
+    ports:
+      - "5433:5432"
+    volumes:
+      - oworkly_lms_pgdata:/var/lib/postgresql/data
+
+volumes:
+  oworkly_lms_pgdata:
