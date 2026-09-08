@@ -10,6 +10,14 @@ import pg from "pg";
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://oworkly:oworkly_dev_pw@localhost:5433/oworkly_lms";
 const client = new pg.Client({ connectionString: DATABASE_URL });
 
+// Fixed by migration 0002/0003 — the real WTG ingestion lives entirely under
+// Chennai Wind Energy Co., re-rooted under the "WTG Daman Operations"
+// Vertical node so it sits in one coherent tree alongside the Figma demo's
+// Blade/Nacelle/Tower branches.
+const CWE_COMPANY_ID = "11111111-1111-1111-1111-111111111111";
+const WTG_DAMAN_OPS_VERTICAL_ID = "c0000000-0000-0000-0000-000000000002";
+const ORG_LEVEL_TYPE_BY_LEGACY_UNIT_TYPE = { PLANT: "LOCATION", AREA: "DEPARTMENT" };
+
 const LEGEND_PATTERNS = [
   /% skill gap/i, /y - yes, n - no/i, /company level gap/i, /sum of line skill gap/i,
   /number of permanent/i, /number of contractual/i, /contractual percentage/i,
@@ -46,17 +54,35 @@ async function upsertOrgUnit({ parentId, unitType, code, name }) {
     [code, parentId ?? null]
   );
   if (existing.rows[0]) return existing.rows[0].org_unit_id;
+  const levelTypeCode = ORG_LEVEL_TYPE_BY_LEGACY_UNIT_TYPE[unitType] ?? "DEPARTMENT";
+  const levelType = await queryOneRow(
+    `SELECT org_level_type_id FROM org_level_type WHERE company_id = $1 AND code = $2`,
+    [CWE_COMPANY_ID, levelTypeCode]
+  );
   const res = await client.query(
-    `INSERT INTO org_unit (parent_org_unit_id, unit_type, code, name) VALUES ($1,$2,$3,$4) RETURNING org_unit_id`,
-    [parentId ?? null, unitType, code, name]
+    `INSERT INTO org_unit (parent_org_unit_id, company_id, unit_type, org_level_type_id, code, name)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING org_unit_id`,
+    [parentId ?? null, CWE_COMPANY_ID, unitType, levelType.org_level_type_id, code, name]
   );
   return res.rows[0].org_unit_id;
+}
+
+async function queryOneRow(sql, params) {
+  const res = await client.query(sql, params);
+  return res.rows[0];
 }
 
 async function loadSkillLevelMap() {
   const res = await client.query(`SELECT skill_level_id, level_code FROM skill_level_definition`);
   const map = {};
   for (const row of res.rows) map[row.level_code] = row.skill_level_id;
+  return map;
+}
+
+async function loadPrimaryLevelMap() {
+  const res = await client.query(`SELECT primary_level_id, code FROM primary_level_definition WHERE company_id = $1`, [CWE_COMPANY_ID]);
+  const map = {};
+  for (const row of res.rows) map[row.code] = row.primary_level_id;
   return map;
 }
 
@@ -141,8 +167,9 @@ async function main() {
   const data = JSON.parse(readFileSync(new URL("./parsed_wtg_full.json", import.meta.url)));
   const levelIdByCode = await loadSkillLevelMap();
   const roleIdByCode = await loadRoleMap();
+  const primaryLevelIdByCode = await loadPrimaryLevelMap();
 
-  const plantId = await upsertOrgUnit({ parentId: null, unitType: "PLANT", code: "WTG-DAMAN", name: "WTG Daman" });
+  const plantId = await upsertOrgUnit({ parentId: WTG_DAMAN_OPS_VERTICAL_ID, unitType: "PLANT", code: "WTG-DAMAN", name: "WTG Daman" });
   console.log(`Plant: WTG Daman (${plantId})`);
 
   const sheetConfig = [
@@ -173,11 +200,11 @@ async function main() {
       const isCritical = String(p.criticality).trim().toUpperCase() === "Y";
       const hc = p.headcount_required || {};
       const res = await client.query(
-        `INSERT INTO process (org_unit_id, code, name, is_critical, required_headcount_l2, required_headcount_l3, required_headcount_l4)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO process (org_unit_id, company_id, code, name, is_critical)
+         VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (org_unit_id, code) DO UPDATE SET name = EXCLUDED.name
          RETURNING process_id`,
-        [areaId, code, name, isCritical, hc.L2 ?? null, hc.L3 ?? null, hc.L4 ?? null]
+        [areaId, CWE_COMPANY_ID, code, name, isCritical]
       );
       const processId = res.rows[0].process_id;
       processIdByName.set(normalizeProcessName(name), processId);
@@ -190,6 +217,16 @@ async function main() {
           `INSERT INTO competency_framework (process_id, skill_level_id) VALUES ($1,$2)
            ON CONFLICT (process_id, skill_level_id) DO NOTHING`,
           [processId, levelId]
+        );
+        // Real processes never defined their own E/S/T-style level codes, so
+        // the process_level backfill reuses the global L-code as-is (matches
+        // what migration 0004 does for pre-existing data — done here inline
+        // since this data doesn't exist until this seed script creates it).
+        const levelInfo = await queryOneRow(`SELECT label, ordinal FROM skill_level_definition WHERE skill_level_id = $1`, [levelId]);
+        await client.query(
+          `INSERT INTO process_level (company_id, process_id, code, name, ordinal, primary_level_id, budgeted_headcount)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (company_id, process_id, code) DO NOTHING`,
+          [CWE_COMPANY_ID, processId, levelCode, levelInfo.label, levelInfo.ordinal, primaryLevelIdByCode[levelCode] ?? null, hc[levelCode] ?? null]
         );
       }
 
@@ -224,15 +261,15 @@ async function main() {
         // Heuristic inferred for this demo (not stated in the source docs): Suzlon's
         // "SC"-prefixed codes read as contractor/vendor codes vs. plain-numeric
         // permanent employee codes — gives the permanent/contract split real signal.
-        const employmentType = /^SC/i.test(empCode) ? "contract" : "permanent";
+        const employmentType = /^SC/i.test(empCode) ? "CONTRACT" : "DIRECT";
         const existing = await client.query(`SELECT worker_id FROM worker WHERE hrms_employee_code = $1`, [empCode]);
         if (existing.rows[0]) {
           workerId = existing.rows[0].worker_id;
         } else {
           const wres = await client.query(
-            `INSERT INTO worker (hrms_employee_code, employment_type, first_name, last_name, org_unit_id)
-             VALUES ($1,$2,$3,$4,$5) RETURNING worker_id`,
-            [empCode, employmentType, first, last, areaId]
+            `INSERT INTO worker (hrms_employee_code, employment_type, first_name, last_name, org_unit_id, company_id)
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING worker_id`,
+            [empCode, employmentType, first, last, areaId, CWE_COMPANY_ID]
           );
           workerId = wres.rows[0].worker_id;
           stats.workers++;
@@ -242,16 +279,26 @@ async function main() {
 
       let attainedLevelId = null;
       let attainedAt = null;
+      let attainedProcessLevelId = null;
       if (row.attained_level_mark) {
         const levelCode = String(row.attained_level_mark).split("=")[0];
         attainedLevelId = levelIdByCode[levelCode] || null;
         attainedAt = attainedLevelId ? new Date() : null;
+        if (levelCode) {
+          const pl = await queryOneRow(`SELECT process_level_id FROM process_level WHERE process_id = $1 AND code = $2`, [processId, levelCode]);
+          attainedProcessLevelId = pl?.process_level_id ?? null;
+        }
       }
       await client.query(
-        `INSERT INTO worker_process_skill (worker_id, process_id, current_skill_level_id, attained_at, source_outcome_id)
-         VALUES ($1,$2,$3,$4,NULL)
-         ON CONFLICT (worker_id, process_id) DO UPDATE SET current_skill_level_id = EXCLUDED.current_skill_level_id, attained_at = EXCLUDED.attained_at`,
-        [workerId, processId, attainedLevelId, attainedAt]
+        `INSERT INTO worker_process_skill (worker_id, process_id, current_skill_level_id, process_level_id, attained_at, source_outcome_id)
+         VALUES ($1,$2,$3,$4,$5,NULL)
+         ON CONFLICT (worker_id, process_id) DO UPDATE SET current_skill_level_id = EXCLUDED.current_skill_level_id, process_level_id = EXCLUDED.process_level_id, attained_at = EXCLUDED.attained_at`,
+        [workerId, processId, attainedLevelId, attainedProcessLevelId, attainedAt]
+      );
+      await client.query(
+        `INSERT INTO worker_process_enrollment (worker_id, process_id, current_process_level_id, source)
+         VALUES ($1,$2,$3,'migration_batch') ON CONFLICT (worker_id, process_id) DO UPDATE SET current_process_level_id = EXCLUDED.current_process_level_id`,
+        [workerId, processId, attainedProcessLevelId]
       );
       stats.workerProcessSkills++;
     }
@@ -349,8 +396,8 @@ async function main() {
     }
 
     const ctRes = await client.query(
-      `INSERT INTO certificate_template (certificate_type, layout_json) VALUES ('COMPETENCY_CARD', $1) RETURNING certificate_template_id`,
-      [JSON.stringify({ brand: "Oworkly LMS — Demo", fields: ["worker_name", "process_name", "skill_level", "valid_to", "qr"] })]
+      `INSERT INTO certificate_template (certificate_type, layout_json, company_id) VALUES ('COMPETENCY_CARD', $1, $2) RETURNING certificate_template_id`,
+      [JSON.stringify({ brand: "Oworkly LMS — Demo", fields: ["worker_name", "process_name", "skill_level", "valid_to", "qr"] }), CWE_COMPANY_ID]
     );
     demoProcessIds[`${key}_cert_template`] = ctRes.rows[0].certificate_template_id;
   }
@@ -378,8 +425,12 @@ async function main() {
     // the "NULL = whole tenant" intent in the spec comment; scope to the plant root
     // instead, which is equivalent in this single-plant demo.
     await client.query(
-      `INSERT INTO user_role (user_id, role_id, org_unit_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-      [userId, roleIdByCode[roleCode], plantId]
+      `INSERT INTO user_role (user_id, role_id, org_unit_id, company_id) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+      [userId, roleIdByCode[roleCode], plantId, CWE_COMPANY_ID]
+    );
+    await client.query(
+      `INSERT INTO company_user_membership (company_id, user_id, is_primary) VALUES ($1,$2,TRUE) ON CONFLICT DO NOTHING`,
+      [CWE_COMPANY_ID, userId]
     );
   }
 

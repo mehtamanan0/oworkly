@@ -2,23 +2,47 @@
   "name": "oworkly-lms-server",
   "private": true,
   "type": "module",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:worker": "tsx watch src/workers/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "start:worker": "node dist/workers/index.js",
+    "migrate": "node-pg-migrate -j sql --migrations-dir db/migrations up",
+    "migrate:down": "node-pg-migrate -j sql --migrations-dir db/migrations down",
+    "migrate:create": "node-pg-migrate create -j sql --migrations-dir db/migrations",
+    "seed": "node ../ingestion/seed.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "bullmq": "^5.34.5",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "pg": "^8.13.1"
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-pg-migrate": "^7.9.1",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.15.1",
+    "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/multer": "^1.4.12",
     "@types/node": "^22.10.2",
+    "@types/pdfkit": "^0.13.5",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
