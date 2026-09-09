@@ -44,14 +44,26 @@ export function withIdempotency(endpoint: string, handler: RequestHandler): Requ
 
       const originalJson = res.json.bind(res);
       res.json = ((body: unknown) => {
-        pool
-          .query(`UPDATE idempotency_key SET response_status = $1, response_body = $2 WHERE idempotency_key = $3 AND endpoint = $4`, [
-            res.statusCode,
-            JSON.stringify(body),
-            key,
-            endpoint,
-          ])
-          .catch((err) => console.error("idempotency store failed", err));
+        if (res.statusCode < 400) {
+          pool
+            .query(`UPDATE idempotency_key SET response_status = $1, response_body = $2 WHERE idempotency_key = $3 AND endpoint = $4`, [
+              res.statusCode,
+              JSON.stringify(body),
+              key,
+              endpoint,
+            ])
+            .catch((err) => console.error("idempotency store failed", err));
+        } else {
+          // A failed attempt (validation error, transient DB error, etc.) must
+          // never become the durable "idempotent result" for this key — the
+          // global error handler calls this same res.json, and without this
+          // branch a client's retry after a bug fix or a transient outage
+          // would replay the stale error forever instead of getting a real
+          // chance to succeed. Release the claim so the key is retryable.
+          pool
+            .query(`DELETE FROM idempotency_key WHERE idempotency_key = $1 AND endpoint = $2 AND response_status IS NULL`, [key, endpoint])
+            .catch((err) => console.error("idempotency claim release failed", err));
+        }
         return originalJson(body);
       }) as typeof res.json;
 

@@ -85,6 +85,13 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
       throw new ApiError(422, `Cannot start an attempt from status ${qcase.rows[0].status}`);
     }
 
+    // An EMPLOYEE-role token is only ever issued by the Worker Self-Assessment
+    // Portal (see workerPortal.ts), to the worker themselves. Per the spec's
+    // most safety-critical rule, self-assessment must NEVER touch
+    // qualification_case.status — so this branch must be decided here, at
+    // start time, not inferred later from which components got scored.
+    const isSelfAssessmentStart = currentUser.roles.includes("EMPLOYEE");
+
     const priorCount = await client.query(`SELECT count(*) AS cnt FROM assessment_attempt WHERE qualification_case_id = $1`, [qualificationCaseId]);
     const attempt = await client.query(
       `INSERT INTO assessment_attempt (qualification_case_id, assessment_package_id, worker_id, attempt_no, status, client_idempotency_key, started_at)
@@ -92,8 +99,15 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
       [qualificationCaseId, qcase.rows[0].assessment_package_id, qcase.rows[0].worker_id, Number(priorCount.rows[0].cnt) + 1, clientIdempotencyKey ?? null]
     );
 
+    // A self-assessment start only ever gets the self-assessment-enabled
+    // component(s) — the worker has no evaluator capacity over the
+    // Practical/Theory/Behavioural components anyway (assertEvaluatorCapacity
+    // would reject any attempt to score them), so there is no reason to
+    // create pending rows for them here.
     const components = await client.query(
-      `SELECT assessment_package_component_id FROM assessment_package_component WHERE assessment_package_id = $1 ORDER BY sequence_no`,
+      `SELECT assessment_package_component_id FROM assessment_package_component
+       WHERE assessment_package_id = $1 ${isSelfAssessmentStart ? "AND self_assessment_enabled" : ""}
+       ORDER BY sequence_no`,
       [qcase.rows[0].assessment_package_id]
     );
     for (const c of components.rows) {
@@ -103,8 +117,10 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
       );
     }
 
-    await transitionCase(client, qualificationCaseId, "ASSESSMENT_IN_PROGRESS", currentUser.userId);
-    await recordAudit(client, { entityName: "assessment_attempt", entityId: attempt.rows[0].assessment_attempt_id, action: "INSERT", actorUserId: currentUser.userId, after: attempt.rows[0] });
+    if (!isSelfAssessmentStart) {
+      await transitionCase(client, qualificationCaseId, "ASSESSMENT_IN_PROGRESS", currentUser.userId);
+    }
+    await recordAudit(client, { entityName: "assessment_attempt", entityId: attempt.rows[0].assessment_attempt_id, action: "INSERT", actorUserId: currentUser.userId, after: { ...attempt.rows[0], selfAssessmentStart: isSelfAssessmentStart } });
     await client.query("COMMIT");
     return attempt.rows[0];
   } catch (err) {
@@ -151,13 +167,24 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     const itemById = new Map(items.rows.map((i) => [i.assessment_item_id, i]));
 
     // --- validation: unknown ids, duplicates, missing mandatory items, bounds ---
+    // pg returns NUMERIC columns as strings (to avoid float precision loss), so
+    // max_score arrives as e.g. "5.00" — and a client's score can just as
+    // easily arrive as a numeric string after round-tripping through JSON.
+    // Every arithmetic use below goes through this normalized map rather than
+    // the raw request value, so a stray string can't turn `raw += r.score`
+    // into silent string concatenation (which previously corrupted the total
+    // into garbage like "05.005.00..." and crashed on save).
     const seen = new Set<string>();
+    const scoreById = new Map<string, number>();
     for (const r of responses) {
       const item = itemById.get(r.assessmentItemId);
       if (!item) throw new ApiError(422, `Unknown assessment_item_id: ${r.assessmentItemId}`);
       if (seen.has(r.assessmentItemId)) throw new ApiError(422, `Duplicate response for item ${r.assessmentItemId}`);
       seen.add(r.assessmentItemId);
-      if (r.score < 0 || r.score > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+      const scoreNum = Number(r.score);
+      if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be a number`);
+      if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+      scoreById.set(r.assessmentItemId, scoreNum);
     }
     const mandatoryIds = items.rows.filter((i) => i.is_mandatory).map((i) => i.assessment_item_id);
     const missing = mandatoryIds.filter((id) => !seen.has(id));
@@ -166,17 +193,18 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     let raw = 0, max = 0, forcedFail = false;
     for (const r of responses) {
       const item = itemById.get(r.assessmentItemId)!;
+      const scoreNum = scoreById.get(r.assessmentItemId)!;
       await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processId, row.assessment_package_id);
-      raw += r.score;
+      raw += scoreNum;
       max += Number(item.max_score);
-      const isCorrect = item.correct_answer_json ? r.score >= Number(item.max_score) : null;
-      if (item.is_critical && r.score < Number(item.max_score)) forcedFail = true;
+      const isCorrect = item.correct_answer_json ? scoreNum >= Number(item.max_score) : null;
+      if (item.is_critical && scoreNum < Number(item.max_score)) forcedFail = true;
       await client.query(
         `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
            response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
-        [componentAttemptId, r.assessmentItemId, r.responseJson ? JSON.stringify(r.responseJson) : null, r.score, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
+        [componentAttemptId, r.assessmentItemId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
       );
     }
 
@@ -213,12 +241,12 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
        WHERE ca.assessment_attempt_id = $1`,
       [attemptId]
     );
-    const mandatoryScored = componentAttempts.rows.filter((c) => c.is_mandatory && c.status === "scored");
-    const mandatoryTotal = componentAttempts.rows.filter((c) => c.is_mandatory);
-    if (mandatoryScored.length < mandatoryTotal.length) {
-      throw new ApiError(422, "All mandatory components must be scored before finalizing");
-    }
-
+    // Whether this is a real (Supervisor/Trainer-run) attempt or a worker's
+    // independent self-assessment-only attempt must be decided BEFORE the
+    // "all mandatory components scored" gate below — a self-assessment
+    // attempt only ever scores the non-mandatory self-assessment component,
+    // so checking mandatory-completeness first would make that path
+    // permanently unfinalizable.
     const scoredNonSelf = componentAttempts.rows.filter((c) => c.status === "scored" && !c.self_assessment_enabled);
 
     if (scoredNonSelf.length === 0) {
@@ -236,6 +264,14 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
       await recordAudit(client, { entityName: "assessment_attempt", entityId: attemptId, action: "STATUS_CHANGE", actorUserId: currentUser.userId, after: { selfAssessmentOnly: true, passed } });
       await client.query("COMMIT");
       return { selfAssessmentOnly: true, passed, compositePct: selfComponent ? Number(selfComponent.weighted_pct) : 0 };
+    }
+
+    // A real (non-self-assessment) attempt DOES require every mandatory
+    // component scored before it can be finalized into a qualification_result.
+    const mandatoryScored = componentAttempts.rows.filter((c) => c.is_mandatory && c.status === "scored");
+    const mandatoryTotal = componentAttempts.rows.filter((c) => c.is_mandatory);
+    if (mandatoryScored.length < mandatoryTotal.length) {
+      throw new ApiError(422, "All mandatory components must be scored before finalizing");
     }
 
     const qcase = await client.query(`SELECT * FROM qualification_case WHERE qualification_case_id = $1 FOR UPDATE`, [attempt.rows[0].qualification_case_id]);

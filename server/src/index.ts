@@ -64,9 +64,13 @@ v1.use("/escalations", escalationsRouter);
 v1.use("/skill-gaps", gapAnalysisRouter);
 v1.use("/recommended-activities", recommendedActivitiesRouter);
 
-// ---- New model: real server-side auth required from here down ----
+// ---- New model: real server-side auth required from here down. Namespaced
+// under /v2 so its paths never collide with the legacy MVP router registered
+// above (e.g. both models otherwise define GET /assessment-attempts/:id —
+// without this prefix, Express's first-match-wins routing would silently
+// send new-model requests into the old, schema-incompatible handlers). ----
 v1.use("/v2", authenticate, masterDataV2Router);
-v1.use(authenticate, qualificationRouter);
+v1.use("/v2", authenticate, qualificationRouter);
 
 app.use("/api/v1", v1);
 

@@ -76,7 +76,7 @@ async function upsertAssessmentDefinition({ name, description, componentType }) 
   return res.rows[0].assessment_definition_id;
 }
 
-async function addItems(definitionId, items) {
+async function addItems(definitionId, items, defaultEvaluatorCapacity = "SUPERVISOR_ASSESSOR") {
   const existing = await client.query(`SELECT 1 FROM assessment_item WHERE assessment_definition_id = $1 LIMIT 1`, [definitionId]);
   if (existing.rows[0]) return;
   let seq = 1;
@@ -90,7 +90,7 @@ async function addItems(definitionId, items) {
         item.correct ? JSON.stringify(item.correct) : null,
         item.explanation ?? null, item.maxScore ?? (item.type === "RATING_1_5" ? 5 : 1),
         item.type === "RATING_1_5" ? 5 : null, item.critical ?? false,
-        item.evaluatorCapacity ?? "SUPERVISOR_ASSESSOR", seq++,
+        item.evaluatorCapacity ?? defaultEvaluatorCapacity, seq++,
       ]
     );
   }
@@ -267,7 +267,7 @@ async function main() {
       options: [{ key: "A", text: "Rush remaining steps to catch up" }, { key: "B", text: "Flag to the supervisor and check for a blocking issue" }, { key: "C", text: "Skip the documentation step" }, { key: "D", text: "Do nothing, it is within tolerance" }],
       correct: ["B"], explanation: "A cycle-time overrun should be flagged, not absorbed by skipping steps — check for a root cause first.",
     },
-  ]);
+  ], "SELF"); // a self-assessment quiz is answered by the worker themselves — no human evaluator
 
   await upsertPackage({
     processLevelId: braLevels.E2,

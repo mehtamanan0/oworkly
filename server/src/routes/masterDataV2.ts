@@ -126,7 +126,7 @@ masterDataV2Router.get(
     const params: any[] = [];
     const clauses: string[] = [];
     if (companyId) { params.push(companyId); clauses.push(`w.company_id = $${params.length}`); }
-    if (q) { params.push(`%${String(q).toLowerCase()}%`); clauses.push(`(lower(w.first_name || ' ' || coalesce(w.last_name,'')) LIKE $${params.length} OR w.hrms_employee_code LIKE $${params.length})`); }
+    if (q) { params.push(`%${String(q).toLowerCase()}%`); clauses.push(`(lower(w.first_name || ' ' || coalesce(w.last_name,'')) LIKE $${params.length} OR lower(w.hrms_employee_code) LIKE $${params.length})`); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = await query<any>(
       `SELECT w.worker_id, w.hrms_employee_code, w.first_name, w.last_name, w.employment_type,
@@ -157,7 +157,7 @@ masterDataV2Router.get(
     if (!worker) throw new ApiError(404, "Worker not found");
     scopedCompanyId(req, worker.company_id);
     const enrollments = await query<any>(
-      `SELECT wpe.*, p.name AS process_name, p.process_id,
+      `SELECT wpe.*, p.name AS process_name, p.code AS process_code, p.process_id,
               cur.code AS current_level_code, cur.name AS current_level_name,
               tgt.code AS target_level_code, tgt.name AS target_level_name
        FROM worker_process_enrollment wpe

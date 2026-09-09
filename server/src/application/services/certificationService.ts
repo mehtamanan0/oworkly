@@ -21,13 +21,18 @@ export async function issueCertificate(qualificationCaseId: string, currentUser:
     );
     if (!qcase.rows[0]) throw new ApiError(404, "Qualification case not found");
     if (currentUser.companyId && currentUser.companyId !== qcase.rows[0].company_id) throw new ApiError(403, "Cross-company access is not permitted");
-    if (qcase.rows[0].status !== "APPROVED") throw new ApiError(422, `Cannot certify from status ${qcase.rows[0].status}`);
 
+    // Idempotent-reissue check must come BEFORE the status guard: a case that
+    // was already certified by an earlier call is, correctly, no longer in
+    // status APPROVED (issuing moves it to CERTIFIED) — checking status first
+    // would reject every retry with a 422 instead of replaying the original
+    // certificate, defeating the entire point of idempotent issuance.
     const existing = await client.query(`SELECT * FROM certificate WHERE qualification_case_id = $1`, [qualificationCaseId]);
     if (existing.rows[0]) {
       await client.query("COMMIT");
       return existing.rows[0]; // idempotent — already issued
     }
+    if (qcase.rows[0].status !== "APPROVED") throw new ApiError(422, `Cannot certify from status ${qcase.rows[0].status}`);
 
     const template = await client.query(
       `SELECT certificate_template_id FROM certificate_template
