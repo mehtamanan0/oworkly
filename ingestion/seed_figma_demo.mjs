@@ -415,6 +415,29 @@ async function main() {
 
   console.log("Named staff users seeded: Preethi Krishnan, Sunrise Solar Admin, Arjun Tiwari, Sunil Mehta, Rajiv Desai");
 
+  // Give the original MVP demo users (seed.mjs) short dev-login usernames too,
+  // matching the sign-in screen's demo-account list, and make the "Platform
+  // Admin" one company-unscoped (a role assignment in more than one company
+  // reads as platform-wide to the dev-login adapter).
+  const legacyUsernames = [
+    ["admin@demo.oworkly.local", "admin"],
+    ["lnd@demo.oworkly.local", "lnd_admin"],
+    ["manager@demo.oworkly.local", "manager"],
+    ["assessor@demo.oworkly.local", "assessor"],
+    ["supervisor@demo.oworkly.local", "supervisor"],
+    ["employee@demo.oworkly.local", "employee"],
+  ];
+  for (const [email, username] of legacyUsernames) {
+    await client.query(`UPDATE app_user SET external_idp_subject = $1 WHERE email = $2`, [username, email]);
+  }
+  const platformAdmin = await client.query(`SELECT user_id FROM app_user WHERE email = 'admin@demo.oworkly.local'`);
+  if (platformAdmin.rows[0]) {
+    await client.query(`INSERT INTO user_role (user_id, role_id, org_unit_id, company_id) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [
+      platformAdmin.rows[0].user_id, roleIds.ADMIN, sssRoot, SSS,
+    ]);
+    await client.query(`INSERT INTO company_user_membership (company_id, user_id, is_primary) VALUES ($1,$2,FALSE) ON CONFLICT DO NOTHING`, [SSS, platformAdmin.rows[0].user_id]);
+  }
+
   console.log("\n=== Figma demo seed complete ===");
   await client.end();
 }

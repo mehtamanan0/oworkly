@@ -76,7 +76,7 @@ assessmentsRouter.get(
     const rows = await query(
       `SELECT aa.*, at.name AS template_name, at.assessment_category, at.is_readiness_check_only, p.name AS process_name, sld.level_code,
               w.first_name, w.last_name
-       FROM assessment_attempt aa
+       FROM legacy_assessment_attempt aa
        JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id
        JOIN process p ON p.process_id = at.process_id
        JOIN skill_level_definition sld ON sld.skill_level_id = at.skill_level_id
@@ -93,11 +93,11 @@ assessmentsRouter.post(
   asyncHandler(async (req, res) => {
     const { workerId, assessmentTemplateId, assessorUserId, learningPathId } = req.body;
     const priorCount = await queryOne<{ cnt: string }>(
-      `SELECT count(*) AS cnt FROM assessment_attempt WHERE worker_id = $1 AND assessment_template_id = $2`,
+      `SELECT count(*) AS cnt FROM legacy_assessment_attempt WHERE worker_id = $1 AND assessment_template_id = $2`,
       [workerId, assessmentTemplateId]
     );
     const row = await queryOne(
-      `INSERT INTO assessment_attempt (worker_id, assessment_template_id, assessor_user_id, learning_path_id, attempt_no, status, started_at)
+      `INSERT INTO legacy_assessment_attempt (worker_id, assessment_template_id, assessor_user_id, learning_path_id, attempt_no, status, started_at)
        VALUES ($1,$2,$3,$4,$5,'in_progress', now()) RETURNING *`,
       [workerId, assessmentTemplateId, assessorUserId ?? null, learningPathId ?? null, Number(priorCount?.cnt ?? 0) + 1]
     );
@@ -111,7 +111,7 @@ assessmentsRouter.get(
     const attempt = await queryOne(
       `SELECT aa.*, at.process_id, at.skill_level_id, at.name AS template_name, at.assessment_category, at.is_readiness_check_only,
               p.name AS process_name, sld.level_code
-       FROM assessment_attempt aa
+       FROM legacy_assessment_attempt aa
        JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id
        JOIN process p ON p.process_id = at.process_id
        JOIN skill_level_definition sld ON sld.skill_level_id = at.skill_level_id
@@ -131,7 +131,7 @@ assessmentsRouter.post(
     const { answers } = req.body as { answers: { questionId: string; selectedKeys: string[] }[] };
     const questions = await query<{ question_id: string; correct_answer_json: string[] }>(
       `SELECT qb.question_id, qb.correct_answer_json FROM question_bank qb
-       JOIN assessment_attempt aa ON aa.assessment_template_id = qb.assessment_template_id
+       JOIN legacy_assessment_attempt aa ON aa.assessment_template_id = qb.assessment_template_id
        WHERE aa.assessment_attempt_id = $1`,
       [req.params.id]
     );
@@ -160,12 +160,12 @@ assessmentsRouter.post(
     const { items, scoredByUserId } = req.body as { items: { checklistItemId: string; score: number }[]; scoredByUserId?: string };
     const checklistItems = await query<{ checklist_item_id: string; max_score: string; is_critical: boolean; category: string; criterion_text: string; evaluator_capacity: string }>(
       `SELECT pci.checklist_item_id, pci.max_score, pci.is_critical, pci.category, pci.criterion_text, pci.evaluator_capacity FROM practical_checklist_item pci
-       JOIN assessment_attempt aa ON aa.assessment_template_id = pci.assessment_template_id
+       JOIN legacy_assessment_attempt aa ON aa.assessment_template_id = pci.assessment_template_id
        WHERE aa.assessment_attempt_id = $1`,
       [req.params.id]
     );
     const templateInfo = await queryOne<{ assessment_category: string }>(
-      `SELECT at.assessment_category FROM assessment_attempt aa JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id WHERE aa.assessment_attempt_id = $1`,
+      `SELECT at.assessment_category FROM legacy_assessment_attempt aa JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id WHERE aa.assessment_attempt_id = $1`,
       [req.params.id]
     );
     // The component owns one evaluator_capacity snapshot (who scored it overall); a
@@ -201,12 +201,12 @@ assessmentsRouter.post(
     const { criteria, scoredByUserId } = req.body as { criteria: { behaviourCriterionId: string; score: number }[]; scoredByUserId?: string };
     const definitions = await query<{ behaviour_criterion_id: string; max_score: string; criterion_code: string; evaluator_capacity: string }>(
       `SELECT bc.behaviour_criterion_id, bc.max_score, bc.criterion_code, bc.evaluator_capacity FROM behaviour_criterion bc
-       JOIN assessment_attempt aa ON aa.assessment_template_id = bc.assessment_template_id
+       JOIN legacy_assessment_attempt aa ON aa.assessment_template_id = bc.assessment_template_id
        WHERE aa.assessment_attempt_id = $1`,
       [req.params.id]
     );
     const templateInfo = await queryOne<{ assessment_category: string }>(
-      `SELECT at.assessment_category FROM assessment_attempt aa JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id WHERE aa.assessment_attempt_id = $1`,
+      `SELECT at.assessment_category FROM legacy_assessment_attempt aa JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id WHERE aa.assessment_attempt_id = $1`,
       [req.params.id]
     );
     const componentEvaluatorCapacity = templateInfo?.assessment_category === "SELF" ? "SELF" : "SUPERVISOR_ASSESSOR";
@@ -235,7 +235,7 @@ assessmentsRouter.post(
   asyncHandler(async (req, res) => {
     const attemptId = req.params.id;
     const attempt = await queryOne<any>(
-      `SELECT aa.*, at.process_id, at.skill_level_id, at.assessment_category, at.is_readiness_check_only FROM assessment_attempt aa
+      `SELECT aa.*, at.process_id, at.skill_level_id, at.assessment_category, at.is_readiness_check_only FROM legacy_assessment_attempt aa
        JOIN assessment_template at ON at.assessment_template_id = aa.assessment_template_id
        WHERE aa.assessment_attempt_id = $1`,
       [attemptId]
@@ -274,7 +274,7 @@ assessmentsRouter.post(
           c.assessment_score_component_id,
         ]);
       }
-      await client.query(`UPDATE assessment_attempt SET status = 'scored', submitted_at = now() WHERE assessment_attempt_id = $1`, [attemptId]);
+      await client.query(`UPDATE legacy_assessment_attempt SET status = 'scored', submitted_at = now() WHERE assessment_attempt_id = $1`, [attemptId]);
 
       if (isReadinessCheck) {
         // Readiness-check attempts never produce an AssessmentOutcome or reach

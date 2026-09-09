@@ -1,0 +1,309 @@
+// The deterministic result engine and qualification-case state machine.
+// Pass/fail is always rule-based here — nothing in this file calls an AI
+// provider, and nothing outside this file is allowed to decide a result.
+import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
+import { pool, query, queryOne } from "../../db.js";
+import { ApiError } from "../../lib/asyncHandler.js";
+import { recordAudit } from "../../infrastructure/database/audit.js";
+import { assertEvaluatorCapacity } from "../../middleware/authorization/index.js";
+import type { CurrentUser } from "../../middleware/authentication/jwt.js";
+import { initiateApproval } from "./approvalService.js";
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ["READY_FOR_ASSESSMENT", "NOT_ELIGIBLE", "CANCELLED"],
+  READY_FOR_ASSESSMENT: ["ASSESSMENT_IN_PROGRESS", "CANCELLED"],
+  ASSESSMENT_IN_PROGRESS: ["PENDING_APPROVAL", "FAILED", "CANCELLED"],
+  FAILED: ["RETEST_COOLING", "CANCELLED"],
+  RETEST_COOLING: ["ASSESSMENT_IN_PROGRESS", "CANCELLED"],
+  PENDING_APPROVAL: ["APPROVED", "RETURNED_FOR_REVIEW", "CANCELLED"],
+  RETURNED_FOR_REVIEW: ["ASSESSMENT_IN_PROGRESS", "PENDING_APPROVAL", "CANCELLED"],
+  APPROVED: ["CERTIFIED"],
+  CERTIFIED: ["EXPIRED", "RENEWAL_IN_PROGRESS"],
+};
+
+async function transitionCase(db: PoolClient, caseId: string, toStatus: string, actorUserId: string | null, correlationId?: string) {
+  const current = await db.query(`SELECT status FROM qualification_case WHERE qualification_case_id = $1 FOR UPDATE`, [caseId]);
+  if (!current.rows[0]) throw new ApiError(404, "Qualification case not found");
+  const from = current.rows[0].status;
+  if (from !== toStatus && !(VALID_TRANSITIONS[from] ?? []).includes(toStatus)) {
+    throw new ApiError(422, `Invalid qualification case transition: ${from} -> ${toStatus}`);
+  }
+  await db.query(`UPDATE qualification_case SET status = $1, updated_at = now() WHERE qualification_case_id = $2`, [toStatus, caseId]);
+  await recordAudit(db, { entityName: "qualification_case", entityId: caseId, action: "STATUS_CHANGE", actorUserId, before: { status: from }, after: { status: toStatus }, correlationId });
+}
+
+export async function createOrGetCase(workerId: string, processId: string, targetProcessLevelId: string, currentUser: CurrentUser) {
+  const worker = await queryOne<{ company_id: string }>(`SELECT company_id FROM worker WHERE worker_id = $1`, [workerId]);
+  if (!worker) throw new ApiError(404, "Worker not found");
+  if (currentUser.companyId && currentUser.companyId !== worker.company_id) throw new ApiError(403, "Cross-company access is not permitted");
+
+  const open = await queryOne(
+    `SELECT * FROM qualification_case WHERE worker_id = $1 AND process_id = $2 AND target_process_level_id = $3
+     AND status NOT IN ('CERTIFIED','CANCELLED','EXPIRED') ORDER BY created_at DESC LIMIT 1`,
+    [workerId, processId, targetProcessLevelId]
+  );
+  if (open) return open;
+
+  const current = await queryOne<{ current_process_level_id: string | null }>(
+    `SELECT current_process_level_id FROM worker_process_enrollment WHERE worker_id = $1 AND process_id = $2`,
+    [workerId, processId]
+  );
+  const activePackage = await queryOne<{ assessment_package_id: string }>(
+    `SELECT assessment_package_id FROM assessment_package WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
+    [targetProcessLevelId]
+  );
+  if (!activePackage) throw new ApiError(422, "No active assessment package configured for this process level");
+
+  // Minimal real eligibility gate for this pass (the full configurable rules
+  // engine is out of scope): the worker must already be enrolled in the
+  // process. A fuller engine would check tenure/OJT/training here and
+  // transition to NOT_ELIGIBLE / TRAINING_REQUIRED instead.
+  const enrolled = await queryOne(`SELECT 1 FROM worker_process_enrollment WHERE worker_id = $1 AND process_id = $2`, [workerId, processId]);
+  const status = enrolled ? "READY_FOR_ASSESSMENT" : "NOT_ELIGIBLE";
+
+  const qualificationNumber = `QID-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const created = await queryOne(
+    `INSERT INTO qualification_case (company_id, worker_id, process_id, from_process_level_id, target_process_level_id, assessment_package_id, status, qualification_number)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [worker.company_id, workerId, processId, current?.current_process_level_id ?? null, targetProcessLevelId, activePackage.assessment_package_id, status, qualificationNumber]
+  );
+  await recordAudit(pool, {
+    entityName: "qualification_case", entityId: created!.qualification_case_id, action: "INSERT", actorUserId: currentUser.userId, after: created,
+  });
+  return created;
+}
+
+export async function startAttempt(qualificationCaseId: string, currentUser: CurrentUser, clientIdempotencyKey?: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const qcase = await client.query(`SELECT * FROM qualification_case WHERE qualification_case_id = $1 FOR UPDATE`, [qualificationCaseId]);
+    if (!qcase.rows[0]) throw new ApiError(404, "Qualification case not found");
+    if (currentUser.companyId && currentUser.companyId !== qcase.rows[0].company_id) throw new ApiError(403, "Cross-company access is not permitted");
+    if (!["READY_FOR_ASSESSMENT", "RETEST_COOLING", "RETURNED_FOR_REVIEW"].includes(qcase.rows[0].status)) {
+      throw new ApiError(422, `Cannot start an attempt from status ${qcase.rows[0].status}`);
+    }
+
+    const priorCount = await client.query(`SELECT count(*) AS cnt FROM assessment_attempt WHERE qualification_case_id = $1`, [qualificationCaseId]);
+    const attempt = await client.query(
+      `INSERT INTO assessment_attempt (qualification_case_id, assessment_package_id, worker_id, attempt_no, status, client_idempotency_key, started_at)
+       VALUES ($1,$2,$3,$4,'in_progress',$5,now()) RETURNING *`,
+      [qualificationCaseId, qcase.rows[0].assessment_package_id, qcase.rows[0].worker_id, Number(priorCount.rows[0].cnt) + 1, clientIdempotencyKey ?? null]
+    );
+
+    const components = await client.query(
+      `SELECT assessment_package_component_id FROM assessment_package_component WHERE assessment_package_id = $1 ORDER BY sequence_no`,
+      [qcase.rows[0].assessment_package_id]
+    );
+    for (const c of components.rows) {
+      await client.query(
+        `INSERT INTO assessment_component_attempt (assessment_attempt_id, assessment_package_component_id, status) VALUES ($1,$2,'pending')`,
+        [attempt.rows[0].assessment_attempt_id, c.assessment_package_component_id]
+      );
+    }
+
+    await transitionCase(client, qualificationCaseId, "ASSESSMENT_IN_PROGRESS", currentUser.userId);
+    await recordAudit(client, { entityName: "assessment_attempt", entityId: attempt.rows[0].assessment_attempt_id, action: "INSERT", actorUserId: currentUser.userId, after: attempt.rows[0] });
+    await client.query("COMMIT");
+    return attempt.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+interface ItemResponseInput {
+  assessmentItemId: string;
+  responseJson?: unknown;
+  score: number;
+  assessorRemark?: string;
+}
+
+export async function scoreComponent(componentAttemptId: string, responses: ItemResponseInput[], currentUser: CurrentUser) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const componentAttempt = await client.query(
+      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, apc.assessment_package_id, apc.assessment_definition_id, apc.is_mandatory
+       FROM assessment_component_attempt ca
+       JOIN assessment_attempt aa ON aa.assessment_attempt_id = ca.assessment_attempt_id
+       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
+       WHERE ca.assessment_component_attempt_id = $1 FOR UPDATE`,
+      [componentAttemptId]
+    );
+    const row = componentAttempt.rows[0];
+    if (!row) throw new ApiError(404, "Component attempt not found");
+    if (row.attempt_status !== "in_progress") throw new ApiError(422, `Cannot score a component on an attempt with status ${row.attempt_status}`);
+
+    const items = await client.query(
+      `SELECT assessment_item_id, item_type, max_score, is_critical, evaluator_capacity, is_mandatory, correct_answer_json FROM assessment_item
+       WHERE assessment_definition_id = $1 AND is_active AND review_status = 'approved'`,
+      [row.assessment_definition_id]
+    );
+    const processIdRow = await client.query(
+      `SELECT qc.process_id FROM qualification_case qc JOIN assessment_attempt aa ON aa.qualification_case_id = qc.qualification_case_id WHERE aa.assessment_attempt_id = $1`,
+      [row.assessment_attempt_id]
+    );
+    const processId = processIdRow.rows[0]?.process_id;
+    const itemById = new Map(items.rows.map((i) => [i.assessment_item_id, i]));
+
+    // --- validation: unknown ids, duplicates, missing mandatory items, bounds ---
+    const seen = new Set<string>();
+    for (const r of responses) {
+      const item = itemById.get(r.assessmentItemId);
+      if (!item) throw new ApiError(422, `Unknown assessment_item_id: ${r.assessmentItemId}`);
+      if (seen.has(r.assessmentItemId)) throw new ApiError(422, `Duplicate response for item ${r.assessmentItemId}`);
+      seen.add(r.assessmentItemId);
+      if (r.score < 0 || r.score > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+    }
+    const mandatoryIds = items.rows.filter((i) => i.is_mandatory).map((i) => i.assessment_item_id);
+    const missing = mandatoryIds.filter((id) => !seen.has(id));
+    if (missing.length > 0) throw new ApiError(422, `Missing mandatory items: ${missing.join(", ")}`);
+
+    let raw = 0, max = 0, forcedFail = false;
+    for (const r of responses) {
+      const item = itemById.get(r.assessmentItemId)!;
+      await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processId, row.assessment_package_id);
+      raw += r.score;
+      max += Number(item.max_score);
+      const isCorrect = item.correct_answer_json ? r.score >= Number(item.max_score) : null;
+      if (item.is_critical && r.score < Number(item.max_score)) forcedFail = true;
+      await client.query(
+        `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
+           response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
+        [componentAttemptId, r.assessmentItemId, r.responseJson ? JSON.stringify(r.responseJson) : null, r.score, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
+      );
+    }
+
+    const weightedPct = max > 0 ? Math.round(((raw / max) * 100) * 100) / 100 : 0;
+    await client.query(
+      `UPDATE assessment_component_attempt SET status = 'scored', raw_score = $1, max_possible_score = $2, weighted_pct = $3, forced_fail = $4, evaluator_user_id = $5, scored_at = now()
+       WHERE assessment_component_attempt_id = $6`,
+      [raw, max, weightedPct, forcedFail, currentUser.userId, componentAttemptId]
+    );
+    await recordAudit(client, { entityName: "assessment_component_attempt", entityId: componentAttemptId, action: "UPDATE", actorUserId: currentUser.userId, after: { raw, max, forcedFail } });
+    await client.query("COMMIT");
+    return { raw, max, weightedPct, forcedFail };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function finalizeAttempt(attemptId: string, currentUser: CurrentUser) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const attempt = await client.query(`SELECT * FROM assessment_attempt WHERE assessment_attempt_id = $1 FOR UPDATE`, [attemptId]);
+    if (!attempt.rows[0]) throw new ApiError(404, "Attempt not found");
+    if (attempt.rows[0].status !== "in_progress") throw new ApiError(422, `Cannot finalize an attempt with status ${attempt.rows[0].status}`);
+
+    const componentAttempts = await client.query(
+      `SELECT ca.*, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled, ad.name AS definition_name
+       FROM assessment_component_attempt ca
+       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
+       JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
+       WHERE ca.assessment_attempt_id = $1`,
+      [attemptId]
+    );
+    const mandatoryScored = componentAttempts.rows.filter((c) => c.is_mandatory && c.status === "scored");
+    const mandatoryTotal = componentAttempts.rows.filter((c) => c.is_mandatory);
+    if (mandatoryScored.length < mandatoryTotal.length) {
+      throw new ApiError(422, "All mandatory components must be scored before finalizing");
+    }
+
+    const scoredNonSelf = componentAttempts.rows.filter((c) => c.status === "scored" && !c.self_assessment_enabled);
+
+    if (scoredNonSelf.length === 0) {
+      // Pure self-assessment attempt — readiness/review only. Per the spec's
+      // most safety-critical rule, this NEVER creates a qualification_result,
+      // never touches qualification_case.status, never issues a certificate.
+      const selfComponent = componentAttempts.rows.find((c) => c.status === "scored" && c.self_assessment_enabled);
+      const passed = selfComponent ? Number(selfComponent.weighted_pct ?? 0) >= Number(selfComponent.min_gate_pct ?? 0) * (100 / 100) : false;
+      await client.query(`UPDATE assessment_attempt SET status = 'scored', submitted_at = now() WHERE assessment_attempt_id = $1`, [attemptId]);
+      await client.query(
+        `INSERT INTO self_assessment_review (assessment_attempt_id, outcome_note) VALUES ($1,$2)
+         ON CONFLICT (assessment_attempt_id) DO NOTHING`,
+        [attemptId, passed ? "Passed readiness check" : "Not passed — review required"]
+      );
+      await recordAudit(client, { entityName: "assessment_attempt", entityId: attemptId, action: "STATUS_CHANGE", actorUserId: currentUser.userId, after: { selfAssessmentOnly: true, passed } });
+      await client.query("COMMIT");
+      return { selfAssessmentOnly: true, passed, compositePct: selfComponent ? Number(selfComponent.weighted_pct) : 0 };
+    }
+
+    const qcase = await client.query(`SELECT * FROM qualification_case WHERE qualification_case_id = $1 FOR UPDATE`, [attempt.rows[0].qualification_case_id]);
+    const processLevel = await client.query(`SELECT min_qualification_score_pct FROM process_level WHERE process_level_id = $1`, [qcase.rows[0].target_process_level_id]);
+    const passThreshold = Number(processLevel.rows[0].min_qualification_score_pct ?? 70);
+
+    let weightedTotal = 0;
+    let forcedFail = false;
+    const componentResults: { componentAttemptId: string; rawPct: number; weightPct: number; weightedPct: number; gatePct: number | null; gatePassed: boolean | null; status: "PASS" | "FAIL" }[] = [];
+    for (const c of componentAttempts.rows) {
+      if (c.status !== "scored") continue;
+      const rawPct = Number(c.max_possible_score) > 0 ? (Number(c.raw_score) / Number(c.max_possible_score)) * 100 : 0;
+      const weightPct = Number(c.weight_pct);
+      const weightedPct = Math.round(((rawPct / 100) * weightPct) * 100) / 100;
+      const gatePct = c.min_gate_pct != null ? Number(c.min_gate_pct) : null;
+      const gatePassed = gatePct != null ? rawPct >= gatePct : null;
+      if (c.forced_fail || gatePassed === false) forcedFail = true;
+      weightedTotal += weightedPct;
+      componentResults.push({ componentAttemptId: c.assessment_component_attempt_id, rawPct: Math.round(rawPct * 100) / 100, weightPct, weightedPct, gatePct, gatePassed, status: (c.forced_fail || gatePassed === false) ? "FAIL" : "PASS" });
+    }
+    weightedTotal = Math.round(weightedTotal * 100) / 100;
+    const result: "PASS" | "FAIL" = !forcedFail && weightedTotal >= passThreshold ? "PASS" : "FAIL";
+
+    await client.query(`UPDATE assessment_attempt SET status = 'scored', submitted_at = now() WHERE assessment_attempt_id = $1`, [attemptId]);
+
+    const qr = await client.query(
+      `INSERT INTO qualification_result (qualification_case_id, assessment_attempt_id, weighted_score_pct, pass_threshold_pct, result)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [qcase.rows[0].qualification_case_id, attemptId, weightedTotal, passThreshold, result]
+    );
+    for (const cr of componentResults) {
+      await client.query(
+        `INSERT INTO qualification_component_result (qualification_result_id, assessment_component_attempt_id, raw_pct, weight_pct, weighted_pct, gate_pct, gate_passed, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [qr.rows[0].qualification_result_id, cr.componentAttemptId, cr.rawPct, cr.weightPct, cr.weightedPct, cr.gatePct, cr.gatePassed, cr.status]
+      );
+    }
+    await client.query(
+      `INSERT INTO qualification_rule_check (qualification_result_id, rule_code, label, passed, detail_json) VALUES
+       ($1,'WEIGHTED_SCORE_MIN',$2,$3,$4),
+       ($1,'ALL_MANDATORY_COMPONENTS_COMPLETE',$5,$6,$7)`,
+      [
+        qr.rows[0].qualification_result_id, `Weighted Score ≥ ${passThreshold}%`, weightedTotal >= passThreshold, JSON.stringify({ weightedTotal, passThreshold }),
+        "All Assessments Completed", mandatoryScored.length === mandatoryTotal.length, JSON.stringify({ completed: mandatoryScored.length, total: mandatoryTotal.length }),
+      ]
+    );
+
+    if (result === "PASS") {
+      await transitionCase(client, qcase.rows[0].qualification_case_id, "PENDING_APPROVAL", currentUser.userId);
+      await initiateApproval(client, qcase.rows[0].qualification_case_id);
+    } else {
+      await transitionCase(client, qcase.rows[0].qualification_case_id, "FAILED", currentUser.userId);
+    }
+
+    await recordAudit(client, { entityName: "qualification_result", entityId: qr.rows[0].qualification_result_id, action: "INSERT", actorUserId: currentUser.userId, after: qr.rows[0] });
+    await client.query("COMMIT");
+    return { selfAssessmentOnly: false, result, weightedTotal, passThreshold, componentResults, qualificationResultId: qr.rows[0].qualification_result_id };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listBlockersForAttemptStart(qualificationCaseId: string) {
+  // Placeholder seam for the fuller eligibility-rules engine (out of scope
+  // this pass) — returns an empty blocker list today since createOrGetCase's
+  // enrollment check is the only real gate implemented.
+  return { eligible: true, blockers: [] as { reason: string; detail?: unknown }[] };
+}
