@@ -179,7 +179,16 @@ describe("full E2E journey: Rajesh Kumar BRA E2 -> E3", () => {
     expect(selfComponent).toBeTruthy();
 
     const selfItemsRes = await agent.get(`/api/v1/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/items`).set("Authorization", `Bearer ${workerToken}`);
-    const selfResponses = selfItemsRes.body.map((it: any) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score }));
+    // MCQ items are server-graded from responseJson, never trusted from a
+    // client-submitted score — look up the real correct option the same way
+    // getCorrectOptionKey does (inlined here to avoid importing a test-only
+    // helper into the e2e file for one query).
+    const selfResponses = await Promise.all(
+      selfItemsRes.body.map(async (it: any) => {
+        const row = await pool.query(`SELECT correct_answer_json FROM assessment_item WHERE assessment_item_id = $1`, [it.assessment_item_id]);
+        return { assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: row.rows[0].correct_answer_json[0] } };
+      })
+    );
     const selfScoreRes = await agent
       .post(`/api/v1/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/score`)
       .set("Authorization", `Bearer ${workerToken}`)

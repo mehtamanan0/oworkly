@@ -15,7 +15,25 @@
 // Requires: the server running (npm run dev in server/), reachable at
 // API_BASE (default http://localhost:4000/api/v1).
 
+import { execFileSync } from "node:child_process";
+
 const API_BASE = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+const DB_CONTAINER = process.env.DB_CONTAINER ?? "oworkly_lms_db";
+
+// MCQ items are objectively server-graded from responseJson — the /items API
+// deliberately never exposes correct_answer_json (so a real client can't
+// read the answer key off the wire), so this script reaches into the same
+// Postgres container the server itself uses to fetch the real correct
+// option, the one way a script driving the self-assessment quiz honestly can.
+function correctOptionKey(assessmentItemId) {
+  const out = execFileSync(
+    "docker",
+    ["exec", DB_CONTAINER, "psql", "-U", "oworkly", "-d", "oworkly_lms", "-t", "-A", "-c",
+      `SELECT correct_answer_json->>0 FROM assessment_item WHERE assessment_item_id = '${assessmentItemId}'`],
+    { encoding: "utf8" }
+  );
+  return out.trim();
+}
 
 let stepNo = 0;
 function step(title) {
@@ -289,7 +307,7 @@ async function main() {
   assert(selfComponent, "the package must include a self-assessment component");
 
   const selfItems = await api("GET", `/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/items`, { token: workerToken, expectStatus: 200 });
-  const selfResponses = selfItems.body.map((it) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: "self_reported_confident" } }));
+  const selfResponses = selfItems.body.map((it) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: correctOptionKey(it.assessment_item_id) } }));
   await api("POST", `/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/score`, {
     token: workerToken,
     idempotencyKey: `demo-self-score-${selfComponent.assessment_component_attempt_id}`,

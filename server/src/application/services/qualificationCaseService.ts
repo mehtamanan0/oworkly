@@ -138,6 +138,29 @@ interface ItemResponseInput {
   assessorRemark?: string;
 }
 
+// MCQ_SINGLE/MCQ_MULTI/TRUE_FALSE items with a correct_answer_json are
+// objectively gradable — the score must be computed here, from the
+// worker/assessor's actual responseJson, never trusted from the client's
+// submitted `score` field. Without this, a tampered client could submit full
+// marks for every question regardless of which option was actually chosen.
+// Rating-type items (assessor judgment, no single correct answer) still use
+// the submitted score as before.
+const AUTO_GRADED_TYPES = new Set(["MCQ_SINGLE", "MCQ_MULTI", "TRUE_FALSE"]);
+
+function computeObjectiveScore(
+  item: { item_type: string; correct_answer_json: unknown; max_score: number | string },
+  responseJson: unknown
+): { scoreNum: number; isCorrect: boolean } | null {
+  if (!AUTO_GRADED_TYPES.has(item.item_type) || item.correct_answer_json == null) return null;
+  const correctKeys = new Set((Array.isArray(item.correct_answer_json) ? item.correct_answer_json : [item.correct_answer_json]).map(String));
+  const resp = (responseJson ?? {}) as { chosen?: string; chosenKeys?: string[] };
+  const chosenKeys = new Set<string>(
+    item.item_type === "MCQ_MULTI" ? (resp.chosenKeys ?? []).map(String) : resp.chosen != null ? [String(resp.chosen)] : []
+  );
+  const isCorrect = chosenKeys.size === correctKeys.size && [...chosenKeys].every((k) => correctKeys.has(k));
+  return { scoreNum: isCorrect ? Number(item.max_score) : 0, isCorrect };
+}
+
 export async function scoreComponent(componentAttemptId: string, responses: ItemResponseInput[], currentUser: CurrentUser) {
   const client = await pool.connect();
   try {
@@ -181,9 +204,15 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
       if (!item) throw new ApiError(422, `Unknown assessment_item_id: ${r.assessmentItemId}`);
       if (seen.has(r.assessmentItemId)) throw new ApiError(422, `Duplicate response for item ${r.assessmentItemId}`);
       seen.add(r.assessmentItemId);
-      const scoreNum = Number(r.score);
-      if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be a number`);
-      if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+      const objective = computeObjectiveScore(item, r.responseJson);
+      let scoreNum: number;
+      if (objective) {
+        scoreNum = objective.scoreNum; // server-computed — the client's submitted `score` is ignored for auto-graded items
+      } else {
+        scoreNum = Number(r.score);
+        if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be a number`);
+        if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+      }
       scoreById.set(r.assessmentItemId, scoreNum);
     }
     const mandatoryIds = items.rows.filter((i) => i.is_mandatory).map((i) => i.assessment_item_id);
@@ -203,7 +232,7 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
         `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
-           response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
+           response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
         [componentAttemptId, r.assessmentItemId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
       );
     }
@@ -217,6 +246,65 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     await recordAudit(client, { entityName: "assessment_component_attempt", entityId: componentAttemptId, action: "UPDATE", actorUserId: currentUser.userId, after: { raw, max, forcedFail } });
     await client.query("COMMIT");
     return { raw, max, weightedPct, forcedFail };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Immediate per-question feedback for an MCQ-style self-assessment quiz
+// (screenshots 15/16: pick an option, see correct/incorrect + explanation
+// right away, before moving to the next question). Deliberately separate
+// from scoreComponent, which requires every item in the component to be
+// submitted together — a quiz needs to reveal correctness one question at a
+// time, without ever exposing the answer key up front. The response this
+// writes is provisional (upserted, same as scoreComponent's own rows) and
+// still has to pass through the normal scoreComponent + finalizeAttempt path
+// to actually count — this endpoint alone never finalizes anything.
+export async function checkItem(componentAttemptId: string, assessmentItemId: string, responseJson: unknown, currentUser: CurrentUser) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const componentAttempt = await client.query(
+      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, aa.assessment_attempt_id, apc.assessment_package_id, apc.assessment_definition_id
+       FROM assessment_component_attempt ca
+       JOIN assessment_attempt aa ON aa.assessment_attempt_id = ca.assessment_attempt_id
+       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
+       WHERE ca.assessment_component_attempt_id = $1 FOR UPDATE`,
+      [componentAttemptId]
+    );
+    const row = componentAttempt.rows[0];
+    if (!row) throw new ApiError(404, "Component attempt not found");
+    if (row.attempt_status !== "in_progress") throw new ApiError(422, `Cannot answer a component on an attempt with status ${row.attempt_status}`);
+
+    const itemRes = await client.query(
+      `SELECT assessment_item_id, item_type, max_score, evaluator_capacity, correct_answer_json, explanation FROM assessment_item
+       WHERE assessment_item_id = $1 AND assessment_definition_id = $2 AND is_active AND review_status = 'approved'`,
+      [assessmentItemId, row.assessment_definition_id]
+    );
+    const item = itemRes.rows[0];
+    if (!item) throw new ApiError(404, "Item not found in this component");
+
+    const objective = computeObjectiveScore(item, responseJson);
+    if (!objective) throw new ApiError(422, "This item type has no single correct answer to check — score it via the component score endpoint instead");
+
+    const processIdRow = await client.query(
+      `SELECT qc.process_id FROM qualification_case qc WHERE qc.qualification_case_id = (SELECT qualification_case_id FROM assessment_attempt WHERE assessment_attempt_id = $1)`,
+      [row.assessment_attempt_id]
+    );
+    await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processIdRow.rows[0]?.process_id, row.assessment_package_id);
+
+    await client.query(
+      `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
+         response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
+      [componentAttemptId, assessmentItemId, JSON.stringify(responseJson), objective.scoreNum, item.max_score, objective.isCorrect, item.evaluator_capacity, currentUser.userId]
+    );
+    await client.query("COMMIT");
+    return { isCorrect: objective.isCorrect, correctAnswerKeys: item.correct_answer_json, explanation: item.explanation, maxScore: item.max_score };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

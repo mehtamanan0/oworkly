@@ -89,3 +89,14 @@ export async function resetTestIdempotencyKeys() {
 export async function resetWorkerVerificationLockout(workerId: string) {
   await pool.query(`UPDATE worker_verification_credential SET failed_attempt_count = 0, locked_until = NULL WHERE worker_id = $1`, [workerId]);
 }
+
+// MCQ items are objectively server-graded from responseJson (never trusted
+// from a client-submitted score) — the /items API deliberately never exposes
+// correct_answer_json, so a test that wants a guaranteed-correct submission
+// has to look it up directly, the same way a real client never could.
+export async function getCorrectOptionKey(assessmentItemId: string): Promise<string> {
+  const row = await pool.query(`SELECT correct_answer_json FROM assessment_item WHERE assessment_item_id = $1`, [assessmentItemId]);
+  const keys = row.rows[0]?.correct_answer_json;
+  if (!Array.isArray(keys) || keys.length === 0) throw new Error(`Item ${assessmentItemId} has no correct_answer_json`);
+  return keys[0];
+}

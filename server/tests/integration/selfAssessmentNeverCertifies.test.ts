@@ -3,7 +3,7 @@
 // change qualification_case.status, and never produce a certificate — no
 // matter how well the worker scores.
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { agent, loadFixtures, resetWorkerQualificationState, resetTestIdempotencyKeys, resetWorkerVerificationLockout, type Fixtures } from "../helpers/testApp.js";
+import { agent, loadFixtures, resetWorkerQualificationState, resetTestIdempotencyKeys, resetWorkerVerificationLockout, getCorrectOptionKey, type Fixtures } from "../helpers/testApp.js";
 import { pool } from "../../src/db.js";
 
 async function verifyAsWorker(fixtures: Fixtures) {
@@ -59,7 +59,13 @@ describe("self-assessment never certifies", () => {
     expect(caseAfterStart.body.status).toBe(statusBeforeAttempt);
 
     const itemsRes = await agent.get(`/api/v1/v2/assessment-component-attempts/${selfComponentAttemptId}/items`).set("Authorization", `Bearer ${workerToken}`);
-    const responses = itemsRes.body.map((it: any) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score }));
+    const responses = await Promise.all(
+      itemsRes.body.map(async (it: any) => ({
+        assessmentItemId: it.assessment_item_id,
+        score: it.max_score, // ignored server-side for MCQ items — score is computed from responseJson below
+        responseJson: { chosen: await getCorrectOptionKey(it.assessment_item_id) },
+      }))
+    );
     const scoreRes = await agent
       .post(`/api/v1/v2/assessment-component-attempts/${selfComponentAttemptId}/score`)
       .set("Authorization", `Bearer ${workerToken}`)

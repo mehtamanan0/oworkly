@@ -23,6 +23,37 @@ qualificationRouter.post(
   }))
 );
 
+// Backs the dashboard's Assessment Queue / Retests Due / Approvals Pending
+// tiles and the Qualifications nav dropdown with a real, clickable list
+// instead of a static count — company-scoped, optionally filtered by status
+// (repeatable query param, e.g. ?status=PENDING_APPROVAL&status=RETURNED_FOR_REVIEW).
+qualificationRouter.get(
+  "/qualification-cases",
+  asyncHandler(async (req, res) => {
+    const user = currentUserOrThrow(req);
+    const statuses = ([] as string[]).concat((req.query.status as string | string[]) ?? []);
+    const params: any[] = [];
+    const clauses: string[] = [];
+    if (user.companyId) { params.push(user.companyId); clauses.push(`qc.company_id = $${params.length}`); }
+    if (statuses.length) { params.push(statuses); clauses.push(`qc.status = ANY($${params.length})`); }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = await query<any>(
+      `SELECT qc.qualification_case_id, qc.status, qc.qualification_number, qc.created_at, qc.updated_at,
+              w.worker_id, w.first_name, w.last_name, w.hrms_employee_code,
+              p.name AS process_name, p.code AS process_code,
+              fl.code AS from_level_code, tl.code AS target_level_code
+       FROM qualification_case qc
+       JOIN worker w ON w.worker_id = qc.worker_id
+       JOIN process p ON p.process_id = qc.process_id
+       LEFT JOIN process_level fl ON fl.process_level_id = qc.from_process_level_id
+       JOIN process_level tl ON tl.process_level_id = qc.target_process_level_id
+       ${where} ORDER BY qc.updated_at DESC LIMIT 200`,
+      params
+    );
+    res.json(rows);
+  })
+);
+
 qualificationRouter.get(
   "/qualification-cases/:id",
   asyncHandler(async (req, res) => {
@@ -112,6 +143,16 @@ qualificationRouter.get(
       [componentAttempt.assessment_definition_id]
     );
     res.json(items);
+  })
+);
+
+qualificationRouter.post(
+  "/assessment-component-attempts/:id/check-item",
+  asyncHandler(async (req, res) => {
+    const user = currentUserOrThrow(req);
+    const { assessmentItemId, responseJson } = req.body as { assessmentItemId: string; responseJson: unknown };
+    const result = await qualificationCaseService.checkItem(req.params.id, assessmentItemId, responseJson, user);
+    res.json(result);
   })
 );
 
