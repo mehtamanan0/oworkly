@@ -78,6 +78,18 @@ export async function resetWorkerQualificationState(workerId: string) {
     [workerId]
   );
   await pool.query(`DELETE FROM qualification_case WHERE worker_id = $1`, [workerId]);
+  // Certifying advances worker_process_enrollment.current_process_level_id
+  // for real (that's the entire point of certifying) — reset it back to the
+  // seeded E2/target-E3 state so a certify test doesn't leak into the next
+  // test's assumption that this worker starts at E2.
+  await pool.query(
+    `UPDATE worker_process_enrollment SET current_process_level_id = e2.process_level_id, target_process_level_id = e3.process_level_id
+     FROM process_level e2, process_level e3
+     WHERE worker_process_enrollment.worker_id = $1
+       AND e2.process_id = worker_process_enrollment.process_id AND e2.code = 'E2'
+       AND e3.process_id = worker_process_enrollment.process_id AND e3.code = 'E3'`,
+    [workerId]
+  );
 }
 
 // Every test-created idempotency key is prefixed "test-" (the manual replay

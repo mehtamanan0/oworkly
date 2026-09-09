@@ -338,7 +338,7 @@ async function main() {
 
   // ---- Named workers (matches Worker Master screenshot 04 exactly) ----
   const workers = [
-    ["EMP-2847", "Rajesh", "Kumar", "Assembly Technician", "DIRECT", bladeAssemblyDept, "SAP_HR", "2021-03-01", bra, "E2"],
+    ["EMP-2847", "Rajesh", "Kumar", "Assembly Technician", "DIRECT", bladeAssemblyDept, "SAP_HR", "2021-03-15", bra, "E2"],
     ["EMP-3102", "Suresh", "Babu", "Assembly Technician", "CONTRACT", bladeAssemblyDept, "VENDOR_PORTAL", "2022-09-01", bra, "E1"],
     ["EMP-2208", "Mohammed", "Aziz", "Lead Technician", "DIRECT", bladeAssemblyDept, "SAP_HR", "2019-06-01", bra, "E4"],
     ["EMP-1955", "Priya", "Sundaram", "Senior Trainer", "DIRECT", bladeAssemblyDept, "SAP_HR", "2017-11-01", bra, "E5"],
@@ -348,21 +348,44 @@ async function main() {
     ["EMP-2790", "Anitha", "Selvam", "Electrical Technician", "VENDOR", nacelleDept, "VENDOR_PORTAL", "2021-08-01", nel, "S3"],
     ["EMP-1830", "Ramesh", "Pillai", "Shift Supervisor", "DIRECT", bladeAssemblyDept, "WORKDAY", "2016-07-01", bra, "E3"],
   ];
+  // Each named worker's designation (e.g. "Assembly Technician") was being
+  // destructured from `workers` above but never persisted anywhere — the
+  // worker->job_role FK existed and /workers/search already expected to
+  // resolve designation through it, but nothing ever populated it for these
+  // rows. Upsert one job_role per distinct designation actually used here.
+  const jobRoleIdByName = {};
+  async function jobRoleIdFor(name) {
+    if (jobRoleIdByName[name]) return jobRoleIdByName[name];
+    const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const res = await client.query(
+      `INSERT INTO job_role (code, name) VALUES ($1,$2) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING job_role_id`,
+      [code, name]
+    );
+    jobRoleIdByName[name] = res.rows[0].job_role_id;
+    return jobRoleIdByName[name];
+  }
+
   const workerIds = {};
   for (const [code, first, last, designation, empType, orgUnitId, sourceKey, joined, processId, levelCode] of workers) {
+    const jobRoleId = await jobRoleIdFor(designation);
     const res = await client.query(
-      `INSERT INTO worker (hrms_employee_code, employment_type, first_name, last_name, org_unit_id, company_id, data_source_id, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (hrms_employee_code) DO UPDATE SET first_name = EXCLUDED.first_name RETURNING worker_id`,
-      [code, empType, first, last, orgUnitId, CWE, sourceIds[sourceKey], joined]
+      `INSERT INTO worker (hrms_employee_code, employment_type, first_name, last_name, org_unit_id, company_id, data_source_id, date_of_joining, primary_job_role_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (hrms_employee_code) DO UPDATE SET first_name = EXCLUDED.first_name, date_of_joining = EXCLUDED.date_of_joining, primary_job_role_id = EXCLUDED.primary_job_role_id RETURNING worker_id`,
+      [code, empType, first, last, orgUnitId, CWE, sourceIds[sourceKey], joined, jobRoleId]
     );
     workerIds[code] = res.rows[0].worker_id;
     if (processId && levelCode) {
-      const pl = await client.query(`SELECT process_level_id FROM process_level WHERE process_id = $1 AND code = $2`, [processId, levelCode]);
+      const pl = await client.query(`SELECT process_level_id, ordinal FROM process_level WHERE process_id = $1 AND code = $2`, [processId, levelCode]);
+      // Every named worker is "targeting" the next level up from their
+      // current one (screenshot 28's "Targeting E3" for Rajesh Kumar at E2)
+      // — the natural next rung, not an arbitrary pick, and simply left
+      // NULL (no target) when already at the top level.
+      const nextLevel = await client.query(`SELECT process_level_id FROM process_level WHERE process_id = $1 AND ordinal = $2`, [processId, pl.rows[0].ordinal + 1]);
       await client.query(
-        `INSERT INTO worker_process_enrollment (worker_id, process_id, current_process_level_id, source) VALUES ($1,$2,$3,'manual')
-         ON CONFLICT (worker_id, process_id) DO UPDATE SET current_process_level_id = EXCLUDED.current_process_level_id`,
-        [workerIds[code], processId, pl.rows[0].process_level_id]
+        `INSERT INTO worker_process_enrollment (worker_id, process_id, current_process_level_id, target_process_level_id, source) VALUES ($1,$2,$3,$4,'manual')
+         ON CONFLICT (worker_id, process_id) DO UPDATE SET current_process_level_id = EXCLUDED.current_process_level_id, target_process_level_id = EXCLUDED.target_process_level_id`,
+        [workerIds[code], processId, pl.rows[0].process_level_id, nextLevel.rows[0]?.process_level_id ?? null]
       );
       await client.query(
         `INSERT INTO worker_process_skill (worker_id, process_id, process_level_id) VALUES ($1,$2,$3)

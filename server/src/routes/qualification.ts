@@ -23,6 +23,31 @@ qualificationRouter.post(
   }))
 );
 
+// Backs the Trainer Dashboard's "Certifications Expiring" table with real
+// rows (the dashboard/trainer summary endpoint only returns a count).
+qualificationRouter.get(
+  "/certificates/expiring",
+  asyncHandler(async (req, res) => {
+    const user = currentUserOrThrow(req);
+    const days = Number(req.query.days ?? 30);
+    const params: any[] = [days];
+    const clauses: string[] = [`c.status = 'active'`, `c.valid_to <= CURRENT_DATE + ($1 || ' days')::interval`];
+    if (user.companyId) { params.push(user.companyId); clauses.push(`w.company_id = $${params.length}`); }
+    const rows = await query<any>(
+      `SELECT c.certificate_id, c.certificate_number, c.valid_to, w.worker_id, w.first_name, w.last_name, w.hrms_employee_code,
+              p.name AS process_name, pl.code AS level_code
+       FROM certificate c
+       JOIN worker w ON w.worker_id = c.worker_id
+       JOIN process p ON p.process_id = c.process_id
+       LEFT JOIN process_level pl ON pl.process_level_id = c.certified_process_level_id
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY c.valid_to ASC LIMIT 50`,
+      params
+    );
+    res.json(rows);
+  })
+);
+
 // Backs the dashboard's Assessment Queue / Retests Due / Approvals Pending
 // tiles and the Qualifications nav dropdown with a real, clickable list
 // instead of a static count — company-scoped, optionally filtered by status
@@ -60,7 +85,8 @@ qualificationRouter.get(
     const user = currentUserOrThrow(req);
     const qcase = await queryOne<any>(
       `SELECT qc.*, w.first_name, w.last_name, w.hrms_employee_code, p.name AS process_name,
-              fl.code AS from_level_code, tl.code AS target_level_code, tl.name AS target_level_name
+              fl.code AS from_level_code, tl.code AS target_level_code, tl.name AS target_level_name,
+              tl.min_qualification_score_pct AS target_min_qualification_score_pct
        FROM qualification_case qc
        JOIN worker w ON w.worker_id = qc.worker_id
        JOIN process p ON p.process_id = qc.process_id
@@ -97,6 +123,36 @@ qualificationRouter.get(
       ruleChecks = await query<any>(`SELECT * FROM qualification_rule_check WHERE qualification_result_id = $1`, [result.qualification_result_id]);
     }
     const certificate = await queryOne<any>(`SELECT * FROM certificate WHERE qualification_case_id = $1`, [req.params.id]);
+    if (certificate) {
+      // The certificate screen (Figma 09) shows three distinct real people —
+      // issuing authority, approver, and trainer — but the certificate row
+      // itself only stores one approver_user_id (whoever called /certify).
+      // Resolve the other two from data that actually exists rather than
+      // reusing the same name three times or inventing one.
+      const issuer = await queryOne<any>(`SELECT display_name FROM app_user WHERE user_id = $1`, [certificate.approver_user_id]);
+      const hodApproval = await queryOne<any>(
+        `SELECT u.display_name FROM qualification_approval_action qaa
+         JOIN approval_policy_stage aps ON aps.approval_policy_stage_id = qaa.approval_policy_stage_id
+         JOIN role r ON r.role_id = aps.role_id
+         JOIN qualification_approval_instance qai ON qai.qualification_approval_instance_id = qaa.qualification_approval_instance_id
+         JOIN app_user u ON u.user_id = qaa.resolved_approver_user_id
+         WHERE qai.qualification_case_id = $1 AND r.role_code = 'HOD' AND qaa.action = 'approved'
+         ORDER BY qaa.acted_at DESC LIMIT 1`,
+        [req.params.id]
+      );
+      const trainer = await queryOne<any>(
+        `SELECT u.display_name FROM assessment_component_attempt aca
+         JOIN assessment_package_component apc ON apc.assessment_package_component_id = aca.assessment_package_component_id
+         JOIN app_user u ON u.user_id = aca.evaluator_user_id
+         WHERE aca.assessment_attempt_id IN (SELECT assessment_attempt_id FROM assessment_attempt WHERE qualification_case_id = $1)
+           AND apc.self_assessment_enabled = false
+         ORDER BY aca.scored_at DESC LIMIT 1`,
+        [req.params.id]
+      );
+      certificate.issuingAuthorityName = issuer?.display_name ?? null;
+      certificate.approvedByName = hodApproval?.display_name ?? null;
+      certificate.trainerName = trainer?.display_name ?? null;
+    }
     res.json({ ...qcase, components, attempts, result, componentResults, ruleChecks, certificate });
   })
 );

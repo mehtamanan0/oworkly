@@ -30,7 +30,7 @@ export async function getApprovalStatus(qualificationCaseId: string) {
   );
   if (!instance) return null;
   const stages = await query<any>(
-    `SELECT aps.*, r.role_name,
+    `SELECT aps.*, r.role_name, r.role_code,
             qaa.action, qaa.remarks, qaa.acted_at, qaa.resolved_approver_user_id,
             u.display_name AS approver_display_name
      FROM approval_policy_stage aps

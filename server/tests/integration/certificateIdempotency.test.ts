@@ -52,6 +52,26 @@ describe("certificate issuance", () => {
     expect(monthsValid).toBeLessThanOrEqual(25);
   });
 
+  it("advances the worker's real current process level on certify — the entire point of certifying", async () => {
+    const before = await pool.query(
+      `SELECT pl.code FROM worker_process_enrollment wpe JOIN process_level pl ON pl.process_level_id = wpe.current_process_level_id
+       WHERE wpe.worker_id = $1 AND wpe.process_id = $2`,
+      [fixtures.rajeshWorkerId, fixtures.braProcessId]
+    );
+    expect(before.rows[0].code).toBe("E2");
+
+    await runSupervisorJourney(fixtures, "cert-advances-level", "CERTIFIED");
+
+    const after = await pool.query(
+      `SELECT pl.code AS current_code, wpe.target_process_level_id FROM worker_process_enrollment wpe
+       JOIN process_level pl ON pl.process_level_id = wpe.current_process_level_id
+       WHERE wpe.worker_id = $1 AND wpe.process_id = $2`,
+      [fixtures.rajeshWorkerId, fixtures.braProcessId]
+    );
+    expect(after.rows[0].current_code).toBe("E3");
+    expect(after.rows[0].target_process_level_id).toBeNull(); // reached — cleared, not left stale
+  });
+
   it("cannot certify a case that has not been approved", async () => {
     const journey = await runSupervisorJourney(fixtures, "cert-not-approved", "PASS");
     const res = await agent

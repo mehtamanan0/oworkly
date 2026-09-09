@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { AuthProvider } from "./lib/AuthContext";
+import { AuthV2Provider } from "./lib/AuthV2Context";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -14,9 +15,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+        <AuthV2Provider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </AuthV2Provider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

@@ -61,7 +61,7 @@ export function WorkerLogin() {
 
           {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-fig-red">{error}</p>}
 
-          <Button type="submit" variant="secondary" disabled={loading} className="w-full justify-center bg-slate-400 text-white hover:bg-slate-500">
+          <Button type="submit" variant="muted" disabled={loading} className="w-full justify-center">
             {loading ? "Checking…" : "Continue"}
           </Button>
 

@@ -73,8 +73,31 @@ export async function issueCertificate(qualificationCaseId: string, currentUser:
     );
 
     await client.query(`UPDATE qualification_case SET status = 'CERTIFIED', updated_at = now() WHERE qualification_case_id = $1`, [qualificationCaseId]);
+
+    // The whole point of certifying is that the worker's real skill level
+    // advances — without this, every other screen (Worker Search, Skill
+    // Profile, Skill Passport, the Management Dashboard matrix) would keep
+    // showing the PRE-certification level forever, since they all read
+    // worker_process_enrollment.current_process_level_id, which nothing
+    // else in this flow ever touches. The target is cleared here (reached),
+    // ready for whoever starts the worker's next qualification to set a new
+    // one.
+    const enrollmentUpdate = await client.query(
+      `UPDATE worker_process_enrollment SET current_process_level_id = $1, target_process_level_id = NULL
+       WHERE worker_id = $2 AND process_id = $3 RETURNING worker_process_enrollment_id`,
+      [qcase.rows[0].target_process_level_id, qcase.rows[0].worker_id, qcase.rows[0].process_id]
+    );
+    if (!enrollmentUpdate.rows[0]) {
+      // Certifying a worker who was never enrolled shouldn't be reachable
+      // (createOrGetCase requires enrollment to reach READY_FOR_ASSESSMENT
+      // in the first place) — but if it ever happens, fail loudly rather
+      // than silently issuing a certificate the skill records don't reflect.
+      throw new ApiError(500, "Cannot certify: worker has no enrollment record for this process");
+    }
+
     await recordAudit(client, { entityName: "certificate", entityId: cert.rows[0].certificate_id, action: "INSERT", actorUserId: currentUser.userId, after: cert.rows[0] });
     await recordAudit(client, { entityName: "qualification_case", entityId: qualificationCaseId, action: "STATUS_CHANGE", actorUserId: currentUser.userId, after: { status: "CERTIFIED" } });
+    await recordAudit(client, { entityName: "worker_process_enrollment", entityId: enrollmentUpdate.rows[0].worker_process_enrollment_id, action: "UPDATE", actorUserId: currentUser.userId, after: { current_process_level_id: qcase.rows[0].target_process_level_id } });
 
     await client.query("COMMIT");
     return cert.rows[0];

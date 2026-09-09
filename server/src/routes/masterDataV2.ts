@@ -67,6 +67,35 @@ masterDataV2Router.post(
 );
 
 masterDataV2Router.get(
+  "/processes",
+  asyncHandler(async (req, res) => {
+    const companyId = req.currentUser?.companyId;
+    const rows = await query<any>(
+      `SELECT p.*, ou.name AS org_unit_name,
+              (SELECT count(*) FROM process_level pl WHERE pl.process_id = p.process_id)::int AS level_count
+       FROM process p
+       JOIN org_unit ou ON ou.org_unit_id = p.org_unit_id
+       ${companyId ? "WHERE p.company_id = $1" : ""}
+       ORDER BY p.name`,
+      companyId ? [companyId] : []
+    );
+    res.json(rows);
+  })
+);
+
+masterDataV2Router.get(
+  "/primary-levels",
+  asyncHandler(async (req, res) => {
+    const companyId = req.currentUser?.companyId;
+    const rows = await query<any>(
+      `SELECT * FROM primary_level_definition ${companyId ? "WHERE company_id = $1" : ""} ORDER BY ordinal`,
+      companyId ? [companyId] : []
+    );
+    res.json(rows);
+  })
+);
+
+masterDataV2Router.get(
   "/processes/:id/levels",
   asyncHandler(async (req, res) => {
     const process = await queryOne<any>(`SELECT * FROM process WHERE process_id = $1`, [req.params.id]);
@@ -111,6 +140,23 @@ masterDataV2Router.get(
 );
 
 masterDataV2Router.get(
+  "/assessment-definitions",
+  asyncHandler(async (req, res) => {
+    const companyId = req.currentUser?.companyId;
+    const rows = await query<any>(
+      `SELECT ad.*,
+              (SELECT count(*) FROM assessment_item ai WHERE ai.assessment_definition_id = ad.assessment_definition_id AND ai.is_active)::int AS item_count,
+              (SELECT ai.item_type FROM assessment_item ai WHERE ai.assessment_definition_id = ad.assessment_definition_id AND ai.is_active LIMIT 1) AS sample_item_type
+       FROM assessment_definition ad
+       ${companyId ? "WHERE ad.company_id = $1" : ""}
+       ORDER BY ad.name`,
+      companyId ? [companyId] : []
+    );
+    res.json(rows);
+  })
+);
+
+masterDataV2Router.get(
   "/assessment-definitions/:id/items",
   asyncHandler(async (req, res) => {
     const items = await query<any>(`SELECT * FROM assessment_item WHERE assessment_definition_id = $1 ORDER BY sequence_no`, [req.params.id]);
@@ -129,13 +175,24 @@ masterDataV2Router.get(
     if (q) { params.push(`%${String(q).toLowerCase()}%`); clauses.push(`(lower(w.first_name || ' ' || coalesce(w.last_name,'')) LIKE $${params.length} OR lower(w.hrms_employee_code) LIKE $${params.length})`); }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = await query<any>(
-      `SELECT w.worker_id, w.hrms_employee_code, w.first_name, w.last_name, w.employment_type,
+      // A worker can hold multiple active process enrollments — a plain
+      // LEFT JOIN would fan out into one row per enrollment (real bug this
+      // fixes: React logged duplicate-key warnings because the same
+      // worker_id came back multiple times, and workers with 2+ enrollments
+      // showed up as separate list entries with different "current
+      // process" values). The LATERAL join picks exactly one representative
+      // enrollment per worker, so this always returns one row per worker.
+      `SELECT w.worker_id, w.hrms_employee_code, w.first_name, w.last_name, w.employment_type, w.date_of_joining,
               jr.name AS designation, ou.name AS department,
               wpe.process_id, p.name AS process_name, pl.code AS level_code
        FROM worker w
        LEFT JOIN job_role jr ON jr.job_role_id = w.primary_job_role_id
        JOIN org_unit ou ON ou.org_unit_id = w.org_unit_id
-       LEFT JOIN worker_process_enrollment wpe ON wpe.worker_id = w.worker_id AND wpe.status = 'active'
+       LEFT JOIN LATERAL (
+         SELECT * FROM worker_process_enrollment e
+         WHERE e.worker_id = w.worker_id AND e.status = 'active'
+         ORDER BY e.enrolled_at DESC LIMIT 1
+       ) wpe ON true
        LEFT JOIN process p ON p.process_id = wpe.process_id
        LEFT JOIN process_level pl ON pl.process_level_id = wpe.current_process_level_id
        ${where} ORDER BY w.first_name LIMIT 200`,
@@ -149,8 +206,11 @@ masterDataV2Router.get(
   "/workers/:id/profile",
   asyncHandler(async (req, res) => {
     const worker = await queryOne<any>(
-      `SELECT w.*, ou.name AS org_unit_name, ds.name AS data_source_name
-       FROM worker w JOIN org_unit ou ON ou.org_unit_id = w.org_unit_id LEFT JOIN data_source ds ON ds.data_source_id = w.data_source_id
+      `SELECT w.*, ou.name AS org_unit_name, ds.name AS data_source_name, jr.name AS designation
+       FROM worker w
+       JOIN org_unit ou ON ou.org_unit_id = w.org_unit_id
+       LEFT JOIN data_source ds ON ds.data_source_id = w.data_source_id
+       LEFT JOIN job_role jr ON jr.job_role_id = w.primary_job_role_id
        WHERE w.worker_id = $1`,
       [req.params.id]
     );
