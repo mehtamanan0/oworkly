@@ -1,0 +1,2059 @@
+{
+  "sheets": [
+    {
+      "sheet_name": "Fr.No.01Skill-Elec30June 2026",
+      "header": {
+        "vertical": "Plant : WTG Daman",
+        "plant": "Production",
+        "area": "Production",
+        "doc_date": "3"
+      },
+      "processes": [
+        {
+          "process_code": "A",
+          "process_name": "Nacelle Electical & Control panel Assembly",
+          "criticality": "Y",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 23,
+            "L3": 4,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 8,
+            "L3": 9,
+            "L4": 10
+          }
+        },
+        {
+          "process_code": "B",
+          "process_name": "Slipring Assembly",
+          "criticality": "Y",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 5,
+            "L3": 4,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 11,
+            "L3": 12,
+            "L4": 13
+          }
+        },
+        {
+          "process_code": "C",
+          "process_name": "Nacelle Testing",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 2,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 14,
+            "L3": 15,
+            "L4": 16
+          }
+        },
+        {
+          "process_code": "D",
+          "process_name": "Cable Set Assembly        ( Elect.) Nacelle & HUB",
+          "criticality": "Y",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 23,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 17,
+            "L3": 18,
+            "L4": 19
+          }
+        },
+        {
+          "process_code": "E",
+          "process_name": "Hub -Electrical Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 13,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 20,
+            "L3": 21,
+            "L4": 22
+          }
+        },
+        {
+          "process_code": "F",
+          "process_name": "Hub Testing",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 2,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 23,
+            "L3": 24,
+            "L4": 25
+          }
+        },
+        {
+          "process_code": "G",
+          "process_name": "Power Cable Preparation",
+          "criticality": "Y",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 0,
+            "L3": 0,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 26,
+            "L3": 27,
+            "L4": 28
+          }
+        },
+        {
+          "process_code": "Total requirement Level Wise",
+          "process_name": "Total requirement Level Wise",
+          "criticality": "TOTAL REQUIREMENT LEVEL WISE",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 68,
+            "L3": 16,
+            "L4": 0
+          },
+          "col_by_level": {
+            "L2": 29,
+            "L3": 30,
+            "L4": 31
+          }
+        }
+      ],
+      "workers": [
+        {
+          "emp_code": "37908",
+          "name": "Bhavinkumar Hemantbhai Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "37908",
+          "name": "Bhavinkumar Hemantbhai Patel",
+          "process_code": "HTG",
+          "process_name": "Hub Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "38919",
+          "name": "Mahtu Sureshbhai Bhayajanbhai Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly-Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "38919",
+          "name": "Mahtu Sureshbhai Bhayajanbhai Only L3",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "38919",
+          "name": "Mahtu Sureshbhai Bhayajanbhai Only L3",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "38919",
+          "name": "Mahtu Sureshbhai Bhayajanbhai Only L3",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39149",
+          "name": "Patel Pragneshkumar Paresh",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39149",
+          "name": "Patel Pragneshkumar Paresh",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39151",
+          "name": "Mahesh Popat More",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "42616",
+          "name": "Chiragkumar Maheshbhai Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "42616",
+          "name": "Chiragkumar Maheshbhai Patel",
+          "process_code": "HTG",
+          "process_name": "Hub Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "42618",
+          "name": "Bhoomi Bhikhubhai Ahir",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly-Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "42619",
+          "name": "Heni Pareshbhai Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly-Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "44866",
+          "name": "Bhupendra Tiwari (L3+L2)SC2881",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "45068",
+          "name": "Ishita Patel Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "42646",
+          "name": "Patel Neha Mukeshbhai",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly-Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "44868",
+          "name": "Prashantkumar",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "44868",
+          "name": "Prashantkumar",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly-Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "44868",
+          "name": "Prashantkumar",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "45783",
+          "name": "Abhishek A patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "45931",
+          "name": "Patel Abhaykumar",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "45786",
+          "name": "Harsh S Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "46172",
+          "name": "Patel Svetang",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC2578",
+          "name": "Dakshish Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2578",
+          "name": "Dakshish Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2578",
+          "name": "Dakshish Patel",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1097",
+          "name": "Ritesh Patel",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1097",
+          "name": "Ritesh Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2506",
+          "name": "Brijesh Mangela",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2636",
+          "name": "Rajneesh Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2886",
+          "name": "Dhaval D.Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2885",
+          "name": "Hiren D. Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2638",
+          "name": "Tejash Lad Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2638",
+          "name": "Tejash Lad Only L3",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2638",
+          "name": "Tejash Lad Only L3",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2371",
+          "name": "Parimal Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2315",
+          "name": "Rinkesh Patel",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2315",
+          "name": "Rinkesh Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3097",
+          "name": "Viral S. Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1128",
+          "name": "Nilesh Mitna",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1128",
+          "name": "Nilesh Mitna",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1057",
+          "name": "Vijay Halpati",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC1057",
+          "name": "Vijay Halpati",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2717",
+          "name": "Ishika Halpati Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2844",
+          "name": "Hardik Patel  Only L3",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2975",
+          "name": "Sonu Kumar Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2848",
+          "name": "Arun Bhasra Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2946",
+          "name": "Subhash D Nikuliya  Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2490",
+          "name": "Sanjay A Patel Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2880",
+          "name": "Hitesh J Pagi  Only L3",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2880",
+          "name": "Hitesh J Pagi  Only L3",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2910",
+          "name": "Payal kamli Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2964",
+          "name": "Vedwati Singh Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2973",
+          "name": "Denika Patel Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3109",
+          "name": "Ratiranjan Sahoo",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3112",
+          "name": "Jaynesh D Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2983",
+          "name": "Vinod Dodka",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC2901",
+          "name": "Premila Padvi",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2967",
+          "name": "Amita Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2985",
+          "name": "Shweta Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3030",
+          "name": "Tejal Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3153",
+          "name": "Rana Choudhari",
+          "process_code": "SRA",
+          "process_name": "Slipring Assembly ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3154",
+          "name": "Tejaswini Choudhari",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3171",
+          "name": "Payal Thakre",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2948",
+          "name": "Miteshkumar Anilbhai Bhatt",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3184",
+          "name": "Basant Bhardwaj",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3208",
+          "name": "Jignesh Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3277",
+          "name": "Patel Charmi Hiteshbhai",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3461",
+          "name": "Virajbhai Nileshbhai Mitna",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3217",
+          "name": "Vikash Bhoya",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3225",
+          "name": "Paresh Lahre",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3286",
+          "name": "Nilesh Govind Mitna",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3292",
+          "name": "Rakeshkumar DhaneshwarRam Bharti",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3425",
+          "name": "Suraj Kushwaha",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3446",
+          "name": "Sumit Chandu Halpati",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3341",
+          "name": "Sanketkumar Sureshbhai Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3358",
+          "name": "Ankush B. Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3358",
+          "name": "Mangela Pratikkumar Kamlakar",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3394",
+          "name": "Mangela Raamnikbhai Ishvarbhai",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3434",
+          "name": "Tushar Chandrakant Halpati",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3447",
+          "name": "Sahil Rajesh",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3391",
+          "name": "Raj Kumar Chaurasia",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3491",
+          "name": "Anjanaben Navinbhai Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3485",
+          "name": "Umeshbhai Shankarbhai Bhoya",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3494",
+          "name": "Bhavesh Kalidas Halpati",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3396",
+          "name": "Abhishek Yadav",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3505",
+          "name": "Vishnu CT",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3257",
+          "name": "Yogesh Movle",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3509",
+          "name": "Patel Ankit",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3527",
+          "name": "Thakariya Nitinbhai Govindbhai",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3528",
+          "name": "Kalpeshbhai Kakadbhai Ganvit",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3514",
+          "name": "Aniket Yogesh Keny",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3516",
+          "name": "Viral Sanjay Varli",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3512",
+          "name": "Shekhar Dipakbhai Halpati",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3557",
+          "name": "Savita Dharmesh",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3651",
+          "name": "Jagdishbhai Paragbhai Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3649",
+          "name": "Pradipbhai Bhikubhai Nayak",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3655",
+          "name": "Ajay Kamlesh Vajvadiya",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "No. of people below required level of skill.(count number less than required skill level)",
+          "name": "No. of people below required level of skill.",
+          "process_code": "No. of people below required level of skill.(count number less than required skill level)",
+          "process_name": "(d)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "name": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "process_code": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "process_name": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Company Level Gap Calculation = Summation of each line level gap",
+          "name": "Company Level Gap Calculation = Summation of each line level gap",
+          "process_code": "Company Level Gap Calculation = Summation of each line level gap",
+          "process_name": "Company Level Gap Calculation = Summation of each line level gap",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "name": "= (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "process_code": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "process_name": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Example ",
+          "name": "Example",
+          "process_code": "Example ",
+          "process_name": "Example ",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Elect.",
+          "name": "Elect.",
+          "process_code": "Elect.",
+          "process_name": "Elect.",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Mech.",
+          "name": "Mech.",
+          "process_code": "Mech.",
+          "process_name": "Mech.",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Total",
+          "name": "Total",
+          "process_code": "Total",
+          "process_name": "Total",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3149",
+          "name": "Mayank  Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3230",
+          "name": "Navnitbhai Jayeshbhai Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3457",
+          "name": "Patel Ketankumar Rajeshbhai",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3513",
+          "name": "Jay Kanji Halpati",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3515",
+          "name": "Devang Kanji Halpati",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3002",
+          "name": "Ulash Patel",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2847",
+          "name": "Sayal Patel Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC3441",
+          "name": "Aditya Hemant Halpati",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3407",
+          "name": "Dharmesh Thakorbhai Bariya",
+          "process_code": "HTG & HEA",
+          "process_name": "Hub Testing and Hub -Electrical Assembly",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3338",
+          "name": "Manish Yadav",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3423",
+          "name": "Jatin R magela",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3530",
+          "name": "Karpat Surendrabhai Kishanbhai",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3194",
+          "name": "Dipeshbhai Shaileshbhai Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3193",
+          "name": "Priya Prajapati",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3035",
+          "name": "M Umesh",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3180",
+          "name": "Amit Kumar",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC2954",
+          "name": "Yogesh Gavli",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3349",
+          "name": "Mukesh Yadav",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3395",
+          "name": "Chanda Chaurasiya",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3433",
+          "name": "Punesh S Halpati",
+          "process_code": "HTG & HEA",
+          "process_name": "Hub Testing and Hub -Electrical Assembly",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3117",
+          "name": "Falguni Nayak",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39154",
+          "name": "Patel Vishalkumar Sureshbhai",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39154",
+          "name": "Patel Vishalkumar Sureshbhai",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39567",
+          "name": "Shubham Anil Waghmare",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "39567",
+          "name": "Shubham Anil Waghmare",
+          "process_code": "NTG",
+          "process_name": "Nacelle Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2981",
+          "name": "Suresh Dodka",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2231",
+          "name": "Abhishek Nijap Only L3",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2231",
+          "name": "Abhishek Nijap Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2231",
+          "name": "Abhishek Nijap Only L3",
+          "process_code": "HTG",
+          "process_name": "Hub Testing ( Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2968",
+          "name": "Vijay Bhoya  Only L3",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2902",
+          "name": "Deepali",
+          "process_code": "CSA",
+          "process_name": "Cable Set Assembly ( Elect.) Nacelle & HUB",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2995",
+          "name": "Parimal Patel Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC3241",
+          "name": "Haresh Bagul",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3328",
+          "name": "Patel Bhargav Harshad",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3182",
+          "name": "Vijay lende",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3152",
+          "name": "Keval Tendel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3157",
+          "name": "Rajkumar Yadav",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3202",
+          "name": "Vipul Khadam -Elect PDCL",
+          "process_code": "NPD",
+          "process_name": "Nacelle Pre Dispatch checking (PDCL)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC2999",
+          "name": "Pintu Patel Only L3",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC2879",
+          "name": "Harsh H Patel",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L3=3"
+        },
+        {
+          "emp_code": "SC3165",
+          "name": "Pankaj Jaiswal",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3071",
+          "name": "Dinesh Makvana",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3242",
+          "name": "Divyesh Satishbhai Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3240",
+          "name": "Rahul Bunkar",
+          "process_code": "HEA",
+          "process_name": "Hub -Electrical Assembly",
+          "attained_level_mark": "L2=2"
+        },
+        {
+          "emp_code": "SC3214",
+          "name": "Vikash Vishwakarma",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3243",
+          "name": "Mayank V Patel",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "SC3216",
+          "name": "Divesh padvi",
+          "process_code": "NEA",
+          "process_name": "Nacelle Electical & Control panel Assembly (Elect.)",
+          "attained_level_mark": null
+        }
+      ]
+    },
+    {
+      "sheet_name": "Fr.No.01 Skill Mech 30June 2026",
+      "header": {
+        "vertical": "Plant : WTG Daman",
+        "plant": "Production",
+        "area": "Production",
+        "doc_date": null
+      },
+      "processes": [
+        {
+          "process_code": "A",
+          "process_name": "Main Bearing Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 10,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 4,
+            "L3": 5,
+            "L4": 6
+          }
+        },
+        {
+          "process_code": "B",
+          "process_name": "Pre Loading & Outer Ring Assembly (HMBAT)",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 10,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 7,
+            "L3": 8,
+            "L4": 9
+          }
+        },
+        {
+          "process_code": "C",
+          "process_name": "Yaw Base & Yaw Drive Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 30,
+            "L3": 8,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 10,
+            "L3": 11,
+            "L4": 12
+          }
+        },
+        {
+          "process_code": "D",
+          "process_name": "CLS Assembly",
+          "criticality": "Y",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 2,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 13,
+            "L3": 14,
+            "L4": 15
+          }
+        },
+        {
+          "process_code": "E",
+          "process_name": "Seal System Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 16,
+            "L3": 17,
+            "L4": 18
+          }
+        },
+        {
+          "process_code": "F",
+          "process_name": "Girder Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 6,
+            "L3": 4,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 19,
+            "L3": 20,
+            "L4": 21
+          }
+        },
+        {
+          "process_code": "G",
+          "process_name": "Gearbox Preparation",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 10,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 22,
+            "L3": 23,
+            "L4": 24
+          }
+        },
+        {
+          "process_code": "H",
+          "process_name": "Fabrication & Platform Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 6,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 25,
+            "L3": 26,
+            "L4": 27
+          }
+        },
+        {
+          "process_code": "I",
+          "process_name": "Drive Train Assembly  (Shim tool)",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 28,
+            "L3": 29,
+            "L4": 30
+          }
+        },
+        {
+          "process_code": "J",
+          "process_name": "Haudralic & Oil cooler Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 31,
+            "L3": 32,
+            "L4": 33
+          }
+        },
+        {
+          "process_code": "K",
+          "process_name": "Generator Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 5,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 34,
+            "L3": 35,
+            "L4": 36
+          }
+        },
+        {
+          "process_code": "L",
+          "process_name": "Nacelle Cover Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 4,
+            "L4": 0
+          },
+          "col_by_level": {
+            "L2": 37,
+            "L3": 38,
+            "L4": 39
+          }
+        },
+        {
+          "process_code": "M",
+          "process_name": "Nacelle Pre Dispatch checking (PDCL)",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 2,
+            "L3": 2,
+            "L4": 0
+          },
+          "col_by_level": {
+            "L2": 40,
+            "L3": 41,
+            "L4": 42
+          }
+        },
+        {
+          "process_code": "N",
+          "process_name": "Nacelle & HUB Painting",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 43,
+            "L3": 44,
+            "L4": 45
+          }
+        },
+        {
+          "process_code": "O",
+          "process_name": "Nacelle & HUB Packing & dispatch",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 10,
+            "L3": 4,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 46,
+            "L3": 47,
+            "L4": 48
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Hub Mech. ( Slew Ring & Pitch Drive Assembly)",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 19,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 49,
+            "L3": 50,
+            "L4": 51
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Hub Lubation Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 5,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 52,
+            "L3": 53,
+            "L4": 54
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Hub-SlewRingProtection Cover Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 2,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 55,
+            "L3": 56,
+            "L4": 57
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Hub-Nose cone Assembly",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 8,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 58,
+            "L3": 59,
+            "L4": 60
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "HUB Pre Dispatch checking (PDCL)",
+          "criticality": "N",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 3,
+            "L3": 2,
+            "L4": null
+          },
+          "col_by_level": {
+            "L2": 61,
+            "L3": 62,
+            "L4": 63
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 64",
+          "criticality": "N",
+          "required_levels": [
+            "L2"
+          ],
+          "headcount_required": {
+            "L2": null
+          },
+          "col_by_level": {
+            "L2": 64
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 65",
+          "criticality": "N",
+          "required_levels": [
+            "L3"
+          ],
+          "headcount_required": {
+            "L3": null
+          },
+          "col_by_level": {
+            "L3": 65
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 66",
+          "criticality": "N",
+          "required_levels": [
+            "L4"
+          ],
+          "headcount_required": {
+            "L4": null
+          },
+          "col_by_level": {
+            "L4": 66
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 67",
+          "criticality": "N",
+          "required_levels": [
+            "L2"
+          ],
+          "headcount_required": {
+            "L2": null
+          },
+          "col_by_level": {
+            "L2": 67
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 68",
+          "criticality": "N",
+          "required_levels": [
+            "L3"
+          ],
+          "headcount_required": {
+            "L3": null
+          },
+          "col_by_level": {
+            "L3": 68
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 69",
+          "criticality": "N",
+          "required_levels": [
+            "L4"
+          ],
+          "headcount_required": {
+            "L4": null
+          },
+          "col_by_level": {
+            "L4": 69
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 70",
+          "criticality": "N",
+          "required_levels": [
+            "L2"
+          ],
+          "headcount_required": {
+            "L2": null
+          },
+          "col_by_level": {
+            "L2": 70
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 71",
+          "criticality": "N",
+          "required_levels": [
+            "L3"
+          ],
+          "headcount_required": {
+            "L3": null
+          },
+          "col_by_level": {
+            "L3": 71
+          }
+        },
+        {
+          "process_code": "P",
+          "process_name": "Unnamed process at col 72",
+          "criticality": "N",
+          "required_levels": [
+            "L4"
+          ],
+          "headcount_required": {
+            "L4": null
+          },
+          "col_by_level": {
+            "L4": 72
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 73",
+          "criticality": "N",
+          "required_levels": [
+            "L2"
+          ],
+          "headcount_required": {
+            "L2": null
+          },
+          "col_by_level": {
+            "L2": 73
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 74",
+          "criticality": "N",
+          "required_levels": [
+            "L3"
+          ],
+          "headcount_required": {
+            "L3": null
+          },
+          "col_by_level": {
+            "L3": 74
+          }
+        },
+        {
+          "process_code": "Q",
+          "process_name": "Unnamed process at col 75",
+          "criticality": "N",
+          "required_levels": [
+            "L4"
+          ],
+          "headcount_required": {
+            "L4": null
+          },
+          "col_by_level": {
+            "L4": 75
+          }
+        },
+        {
+          "process_code": "R",
+          "process_name": "Unnamed process at col 76",
+          "criticality": "N",
+          "required_levels": [
+            "L2"
+          ],
+          "headcount_required": {
+            "L2": null
+          },
+          "col_by_level": {
+            "L2": 76
+          }
+        },
+        {
+          "process_code": "R",
+          "process_name": "Unnamed process at col 77",
+          "criticality": "N",
+          "required_levels": [
+            "L3"
+          ],
+          "headcount_required": {
+            "L3": null
+          },
+          "col_by_level": {
+            "L3": 77
+          }
+        },
+        {
+          "process_code": "R",
+          "process_name": "Unnamed process at col 78",
+          "criticality": "N",
+          "required_levels": [
+            "L4"
+          ],
+          "headcount_required": {
+            "L4": null
+          },
+          "col_by_level": {
+            "L4": 78
+          }
+        },
+        {
+          "process_code": "Total requirement Level Wise",
+          "process_name": "Total requirement Level Wise",
+          "criticality": "TOTAL REQUIREMENT LEVEL WISE",
+          "required_levels": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "headcount_required": {
+            "L2": 168,
+            "L3": 52,
+            "L4": 0
+          },
+          "col_by_level": {
+            "L2": 79,
+            "L3": 80,
+            "L4": 81
+          }
+        }
+      ],
+      "workers": [
+        {
+          "emp_code": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "-400",
+          "process_name": "#DIV/0!",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "process_name": "Y - Yes, N - No, 1- Level 1, 2 -Level 2, 3 - Level 3, 4 - Level 4",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Company Level Gap Calculation = Summation of each line level gap",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "Company Level Gap Calculation = Summation of each line level gap",
+          "process_name": "Company Level Gap Calculation = Summation of each line level gap",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "process_name": "                                                       = (Sum of Line Skill Gap / Sum of Total Requirement) x 100",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Example ",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "Line Skill Gap",
+          "process_name": "Line Skill Gap",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Number of Permanent Employee (e)",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Month",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Number of Contractual (f)",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Apr",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Total ",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "May",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Contractual percentage (g)",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "June",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Target Contractual Percentage (h)",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Q1",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "Target Contractual Percentage (h)",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "July",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "178.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Aug",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "90",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Sept",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Q2",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "S144 304",
+          "process_name": "Mech.",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "2 SET",
+          "process_name": "Ele.",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "",
+          "process_name": "Total",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "Dec.25",
+          "process_name": "\u00a0Skill-matrix ",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "2 per day",
+          "process_name": "Req.",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "L2",
+          "process_name": "239",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "L3",
+          "process_name": "62",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "L4",
+          "process_name": "3",
+          "attained_level_mark": null
+        },
+        {
+          "emp_code": "268.625",
+          "name": "% Skill Gap  = (No of people below required level (d)) / (No of people with required skill level (c)) x 100",
+          "process_code": "Total",
+          "process_name": "304",
+          "attained_level_mark": null
+        }
+      ]
+    }
+  ]
+}

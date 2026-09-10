@@ -2,6 +2,9 @@
 // by both index.ts (which binds a real port) and the test suite (which hands
 // this straight to supertest, letting supertest manage its own ephemeral
 // server per test run instead of fighting over a fixed port).
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import { pool } from "./db.js";
@@ -77,6 +80,20 @@ v1.use("/v2", authenticate, masterDataV2Router);
 v1.use("/v2", authenticate, qualificationRouter);
 
 app.use("/api/v1", v1);
+
+// ---- Single-service deploy: serve the built SPA and let client-side routing
+// handle anything that isn't an API or health path. In local dev the SPA is
+// served by Vite on :5173 and web/dist won't exist — the guard makes that a
+// no-op. (../../web/dist resolves the same from src/ under tsx and from
+// dist/ after tsc, since both sit one level under server/.) ----
+const webDist = fileURLToPath(new URL("../../web/dist", import.meta.url));
+if (existsSync(webDist)) {
+  app.use(express.static(webDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/health")) return next();
+    res.sendFile(join(webDist, "index.html"));
+  });
+}
 
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof ApiError) {

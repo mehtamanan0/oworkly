@@ -13,8 +13,13 @@
     "migrate:down": "node-pg-migrate -j sql --migrations-dir db/migrations down",
     "migrate:create": "node-pg-migrate create -j sql --migrations-dir db/migrations",
     "seed": "node ../ingestion/seed.mjs",
+    "seed:all": "node ../ingestion/seed.mjs && node ../ingestion/seed_figma_demo.mjs",
+    "release": "npm run migrate && npm run seed:all",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "bullmq": "^5.34.5",

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthV2 } from "../lib/AuthV2Context";
+import { authApi } from "../lib/apiV2";
 
 interface NavItem {
   label: string;
@@ -73,7 +74,6 @@ export function AppHeader({ breadcrumbs }: { breadcrumbs?: { label: string; to?:
 
   async function switchDemoUser(username: string) {
     setDemoOpen(false);
-    const { authApi } = await import("../lib/apiV2");
     const res = await authApi.devLogin(username);
     signIn(res.accessToken, res.user);
     navigate("/dashboard");

@@ -4,4 +4,8 @@ dist/
 *.log
 .DS_Store
 ingestion/parsed_wtg*.json
+# ...but the parsed demo dataset the seed needs IS committed, so hosted deploys
+# (Render blueprint etc.) can run `seed.mjs` from a clean clone. 63 KB, derived
+# from the WTG skill-matrix workbook, no secrets.
+!ingestion/parsed_wtg_full.json
 *.tsbuildinfo

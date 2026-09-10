@@ -1,0 +1,63 @@
+# Render Blueprint — one web service (Express serves the built SPA *and* the
+# API from the same origin) + one Postgres. Nothing else is needed: Redis,
+# object storage and the AI providers referenced in the config are inert in
+# this phase.
+#
+# Deploy:
+#   1. Push this repo to GitHub.
+#   2. Render dashboard -> New + -> Blueprint -> pick the repo -> Apply.
+#   3. Wait ~5 min, open the "oworkly" service URL, sign in with `admin` and
+#      any password (see the demo-accounts panel on the sign-in screen).
+#
+# Cost notes:
+#   - Both default to the FREE plan. The free web service sleeps after ~15 min
+#     idle (~40 s cold start on the next hit). Set `plan: starter` (~$7/mo)
+#     for always-on.
+#   - Render's free Postgres is DELETED 30 days after creation. For anything
+#     longer, change the DB `plan` to `basic-256mb` (~$6/mo), or delete the
+#     `databases:` block and set DATABASE_URL by hand to a free Neon string.
+
+databases:
+  - name: oworkly-db
+    plan: free
+    region: singapore   # keep this the same as the web service's region
+    databaseName: oworkly_lms
+    user: oworkly
+
+services:
+  - type: web
+    name: oworkly
+    runtime: node
+    plan: free
+    region: singapore   # closest free region to India; also: oregon, ohio, frankfurt
+    branch: main
+    # Build both halves and compile the server. `npm ci` needs the committed
+    # lockfiles (all three are tracked).
+    buildCommand: >-
+      npm --prefix web ci &&
+      npm --prefix web run build &&
+      npm --prefix server ci &&
+      npm --prefix server run build &&
+      npm --prefix ingestion ci
+    # migrate + seed run on every boot. Both are idempotent (versioned
+    # migrations; upsert-only seed scripts), so this is safe on the free tier
+    # where there's no separate pre-deploy step. Adds a few seconds to a cold
+    # start. On `starter`+, move `npm run release` to `preDeployCommand`.
+    startCommand: cd server && npm run release && node dist/index.js
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # NOT "production": config.devAuthActuallyEnabled is false whenever
+      # NODE_ENV === "production", which disables the only login path (there is
+      # no real OIDC yet). A hosted demo must run in development mode.
+      - key: NODE_ENV
+        value: development
+      - key: DEV_AUTH_ENABLED
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: oworkly-db
+          property: connectionString
