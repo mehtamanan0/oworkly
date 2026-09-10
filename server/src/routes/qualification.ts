@@ -221,7 +221,7 @@ qualificationRouter.post(
   "/assessment-attempt-sections/:id/score",
   withIdempotency("assessment-attempt-sections:score", asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
-    const { responses } = req.body as { responses: { questionId: string; score: number; responseJson?: unknown; assessorRemark?: string }[] };
+    const { responses } = req.body as { responses: { questionId: string; score: number; responseJson?: unknown; assessorRemark?: string; evidenceFileId?: string }[] };
     const result = await qualificationCaseService.scoreComponent(req.params.id, responses, user);
     res.json(result);
   }))

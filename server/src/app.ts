@@ -26,6 +26,7 @@ import { gapAnalysisRouter, recommendedActivitiesRouter } from "./routes/gapAnal
 import { qualificationRouter } from "./routes/qualification.js";
 import { masterDataV2Router } from "./routes/masterDataV2.js";
 import { workerPortalRouter } from "./routes/workerPortal.js";
+import { mediaRouter, mediaLocalRouter } from "./routes/media.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGINS }));
@@ -49,6 +50,10 @@ const v1 = express.Router();
 v1.use("/auth", devLoginRouter);
 v1.use("/worker-portal", workerPortalRouter);
 v1.use("/public", publicRouter);
+// local object-store driver only (dev/CI); 404s under a real S3/R2 driver. A
+// raw <img>/<video> src and the "presigned" PUT carry no bearer token, so this
+// pair stays out of the authenticated /v2 mount.
+v1.use("/v2", mediaLocalRouter);
 
 // ---- Legacy MVP demo routes (pre-date this milestone's auth model; kept
 // running, unauthenticated, exactly as before — see README "known limitations") ----
@@ -76,6 +81,7 @@ v1.use("/recommended-activities", recommendedActivitiesRouter);
 // send new-model requests into the old, schema-incompatible handlers). ----
 v1.use("/v2", authenticate, masterDataV2Router);
 v1.use("/v2", authenticate, qualificationRouter);
+v1.use("/v2", authenticate, mediaRouter);
 
 app.use("/api/v1", v1);
 

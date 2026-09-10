@@ -332,7 +332,21 @@ async function main() {
       { definitionId: braSelfQuiz, weightPct: 0, gatePct: 60, mandatory: false, selfAssess: true },
     ],
   });
-  console.log("BRA assessment library + E2/E3 package links seeded");
+
+  // ---- Media evidence assessment (ERD ask #5: Video / Voice / Image question
+  //      types). Kept on E4 so it exercises the media capture + object-store
+  //      path without disturbing the E2/E3 demo journey. ----
+  const braEvidence = await upsertAssessmentDefinition({ name: "BRA Workstation Evidence", description: "Photo / video / audio capture of the worker's BRA station and technique", componentType: "PRACTICAL" });
+  await addItems(braEvidence, [
+    { type: "IMAGE", prompt: "Photo of the completed blade-root joint with torque-stripe witness marks visible", maxScore: 10, evaluatorCapacity: "SUPERVISOR_ASSESSOR" },
+    { type: "VIDEO", prompt: "Short video of the worker performing one full torque sequence to spec", maxScore: 10, evaluatorCapacity: "SUPERVISOR_ASSESSOR" },
+    { type: "AUDIO", prompt: "Worker explains, in their own words, the NCR-raising steps for a bond-gap defect", maxScore: 10, evaluatorCapacity: "SUPERVISOR_ASSESSOR" },
+  ], "SUPERVISOR_ASSESSOR");
+  await upsertPackage({
+    processLevelId: braLevels.E4,
+    components: [{ definitionId: braEvidence, weightPct: 100, gatePct: 60, mandatory: true }],
+  });
+  console.log("BRA assessment library + E2/E3 package links + E4 media-evidence assessment seeded");
 
   // ---- Sub-levels + categorised criteria for BRA E2 & E3 (migration 0014,
   //      matches screenshot 19's "3 sub-levels" per level) ----

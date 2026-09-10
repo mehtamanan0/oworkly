@@ -94,3 +94,35 @@ function idempotencyKey(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 export { idempotencyKey };
+
+async function sha256Hex(file: Blob): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export type MediaKind = "image" | "video" | "audio";
+
+export const media = {
+  // presign -> PUT straight to the bucket (or local API) -> confirm.
+  // Returns the evidence_file id to attach to a question response.
+  async upload(file: File, kind: MediaKind): Promise<string> {
+    const ticket = await request<{ evidenceFileId: string; uploadUrl: string; uploadMethod: string; uploadHeaders: Record<string, string> }>(
+      V2_BASE,
+      "/media/uploads",
+      { method: "POST", body: JSON.stringify({ kind, contentType: file.type, sizeBytes: file.size, filename: file.name }) }
+    );
+    const relative = ticket.uploadUrl.startsWith("/");
+    const token = getStoredToken();
+    const headers: Record<string, string> = { ...ticket.uploadHeaders };
+    if (relative && token) headers.Authorization = `Bearer ${token}`; // local driver route is same-origin + authless-by-mount, but harmless to send
+    const put = await fetch(ticket.uploadUrl, { method: ticket.uploadMethod || "PUT", headers, body: file });
+    if (!put.ok) throw new ApiV2Error(put.status, `Upload failed (${put.status})`);
+    await request(V2_BASE, `/media/uploads/${ticket.evidenceFileId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ sha256: await sha256Hex(file), sizeBytes: file.size }),
+    });
+    return ticket.evidenceFileId;
+  },
+  meta: (evidenceFileId: string) => request<{ url: string; mimeType: string; fileType: string }>(V2_BASE, `/media/${evidenceFileId}/url`),
+};

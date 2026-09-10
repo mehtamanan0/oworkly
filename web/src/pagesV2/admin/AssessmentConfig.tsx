@@ -45,6 +45,17 @@ interface Item {
 
 const TYPE_TONE: Record<string, string> = { PRACTICAL: "text-fig-blue bg-blue-50", THEORY: "text-fig-blue bg-blue-50", BEHAVIOURAL: "text-fig-purple bg-purple-50" };
 
+const QUESTION_TYPE_LABEL: Record<string, string> = {
+  RATING_1_5: "Rating", MCQ_SINGLE: "MCQ (single)", MCQ_MULTI: "MCQ (multi)", TRUE_FALSE: "True / False",
+  CHECKLIST_PASS_FAIL: "Checklist", EVIDENCE_OBSERVATION: "Observation", FREE_TEXT_REMARK: "Remark",
+  VIDEO: "🎬 Video", AUDIO: "🎙 Audio", IMAGE: "📷 Image",
+};
+const qLabel = (t: string) => QUESTION_TYPE_LABEL[t] ?? t;
+const qDescription = (t: string, maxScore: string | number) =>
+  t === "RATING_1_5" ? "Rating 1–5 · assessor adds remark per question"
+  : ["VIDEO", "AUDIO", "IMAGE"].includes(t) ? `${qLabel(t).replace(/^\S+\s/, "")} capture · assessor-graded, max ${maxScore} marks`
+  : `Max ${maxScore} marks`;
+
 export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "question-bank" }) {
   const navigate = useNavigate();
   const params = useParams();
@@ -270,11 +281,9 @@ function QuestionBankTab({ definitions, initialId }: { definitions?: Definition[
             <div key={it.question_id} className="flex items-start gap-3 border-b border-fig-border px-5 py-3.5 last:border-b-0">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-fig-bg text-xs font-semibold text-fig-muted">{i + 1}</span>
               <div className="flex-1">
-                <span className="mr-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-fig-blue">{it.question_type === "RATING_1_5" ? "Rating" : it.question_type}</span>
+                <span className="mr-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-fig-blue">{qLabel(it.question_type)}</span>
                 <span className="text-sm font-medium text-fig-text">{it.prompt}</span>
-                <div className="mt-0.5 text-xs text-fig-muted">
-                  {it.question_type === "RATING_1_5" ? "Rating 1–5 · assessor adds remark per question" : `Max ${it.max_score} marks`}
-                </div>
+                <div className="mt-0.5 text-xs text-fig-muted">{qDescription(it.question_type, it.max_score)}</div>
               </div>
             </div>
           ))}

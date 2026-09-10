@@ -61,3 +61,13 @@ services:
         fromDatabase:
           name: oworkly-db
           property: connectionString
+      # Media (VIDEO/AUDIO/IMAGE question) storage is unset here on purpose, so
+      # the `local` driver runs: uploads land on the instance's ephemeral disk
+      # — fine for a demo, lost on every redeploy. For persistent media, create
+      # a Cloudflare R2 bucket + an S3 API token and add these in the Render
+      # dashboard (Environment tab), NOT this file:
+      #   STORAGE_DRIVER   = s3
+      #   STORAGE_ENDPOINT = https://<account-id>.r2.cloudflarestorage.com
+      #   STORAGE_BUCKET   = <bucket name>
+      #   STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY = <R2 API token pair>
+      #   STORAGE_REGION   = auto

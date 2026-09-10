@@ -5,7 +5,10 @@ import { AppShell } from "../../shell/AppShell";
 import { ProgressRail } from "../../components/figma/ProgressRail";
 import { RatingRow, RatingGridHeader } from "../../components/figma/RatingGrid";
 import { Button } from "../../components/figma/Button";
-import { qual, v2, idempotencyKey } from "../../lib/apiV2";
+import { MediaCapture } from "../../components/figma/MediaCapture";
+import { qual, v2, idempotencyKey, type MediaKind } from "../../lib/apiV2";
+
+const MEDIA_KIND: Record<string, MediaKind> = { IMAGE: "image", VIDEO: "video", AUDIO: "audio" };
 
 interface ComponentAttempt {
   assessment_attempt_section_id: string;
@@ -49,6 +52,7 @@ export function Evaluate() {
   const qc = useQueryClient();
   const [componentIndex, setComponentIndex] = useState(0);
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [evidenceIds, setEvidenceIds] = useState<Record<string, string | null>>({});
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -89,6 +93,7 @@ export function Evaluate() {
         questionId: it.question_id,
         score: scores[it.question_id] ?? 0,
         assessorRemark: remarks || undefined,
+        evidenceFileId: evidenceIds[it.question_id] ?? undefined,
       }));
       return qual.post(`/assessment-attempt-sections/${current!.assessment_attempt_section_id}/score`, { responses }, idempotencyKey("ui-score"));
     },
@@ -98,6 +103,7 @@ export function Evaluate() {
       if (componentIndex + 1 < mandatorySteps.length) {
         setComponentIndex(componentIndex + 1);
         setScores({});
+        setEvidenceIds({});
         setRemarks("");
       } else {
         const result = await qual.post<{ result: string; qualificationResultId?: string }>(`/assessment-attempts/${attemptId}/finalize`, {}, idempotencyKey("ui-finalize"));
@@ -115,8 +121,12 @@ export function Evaluate() {
     );
   }
 
-  const allAnswered = items.length > 0 && items.every((it) => scores[it.question_id] !== undefined);
+  const mediaKind = MEDIA_KIND[items[0]?.question_type];
   const isRating = items[0]?.question_type === "RATING_1_5";
+  const isMedia = !!mediaKind;
+  const allAnswered =
+    items.length > 0 &&
+    items.every((it) => scores[it.question_id] !== undefined && (!MEDIA_KIND[it.question_type] || evidenceIds[it.question_id]));
 
   return (
     <AppShell breadcrumbs={[{ label: "Assessments" }, { label: "Evaluate" }]}>
@@ -196,6 +206,35 @@ export function Evaluate() {
               />
             ))}
           </>
+        ) : isMedia ? (
+          <div className="space-y-5">
+            {items.map((it) => (
+              <div key={it.question_id} className="border-b border-fig-border pb-4 last:border-b-0 last:pb-0">
+                <div className="mb-2 text-sm font-medium text-fig-text">
+                  {it.prompt}
+                  {it.is_critical && <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-fig-red">CRITICAL</span>}
+                </div>
+                <MediaCapture
+                  kind={MEDIA_KIND[it.question_type]}
+                  value={evidenceIds[it.question_id] ?? null}
+                  onChange={(id) => setEvidenceIds((e) => ({ ...e, [it.question_id]: id }))}
+                />
+                <label className="mt-2 flex items-center gap-2 text-xs text-fig-muted">
+                  Score
+                  <input
+                    type="number"
+                    min={0}
+                    max={Number(it.max_score)}
+                    step={0.5}
+                    value={scores[it.question_id] ?? ""}
+                    onChange={(e) => setScores((s) => ({ ...s, [it.question_id]: Number(e.target.value) }))}
+                    className="w-20 rounded border border-fig-border px-2 py-1 text-sm text-fig-text focus:border-fig-blue focus:outline-none"
+                  />
+                  <span>/ {Number(it.max_score)}</span>
+                </label>
+              </div>
+            ))}
+          </div>
         ) : (
           // The formal Supervisor/Trainer-run components in this vertical
           // slice are all RATING_1_5 (matching every seeded assessment

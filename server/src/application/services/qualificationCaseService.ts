@@ -137,7 +137,14 @@ interface ItemResponseInput {
   responseJson?: unknown;
   score: number;
   assessorRemark?: string;
+  evidenceFileId?: string;
 }
+
+// VIDEO / AUDIO / IMAGE questions (ERD ask #5): human-graded like
+// EVIDENCE_OBSERVATION (no correct_answer_json), but the response MUST carry a
+// confirmed evidence_file — a media question scored with no captured artifact
+// is rejected.
+const MEDIA_TYPES = new Set(["VIDEO", "AUDIO", "IMAGE"]);
 
 // MCQ_SINGLE/MCQ_MULTI/TRUE_FALSE items with a correct_answer_json are
 // objectively gradable — the score must be computed here, from the
@@ -198,8 +205,12 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     // the raw request value, so a stray string can't turn `raw += r.score`
     // into silent string concatenation (which previously corrupted the total
     // into garbage like "05.005.00..." and crashed on save).
+    const workerCompany = await client.query(`SELECT company_id FROM worker WHERE worker_id = $1`, [row.worker_id]);
+    const workerCompanyId = workerCompany.rows[0]?.company_id ?? null;
+
     const seen = new Set<string>();
     const scoreById = new Map<string, number>();
+    const evidenceById = new Map<string, string>(); // questionId -> evidence_file_id (media questions only)
     for (const r of responses) {
       const item = itemById.get(r.questionId);
       if (!item) throw new ApiError(422, `Unknown question_id: ${r.questionId}`);
@@ -213,6 +224,19 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
         scoreNum = Number(r.score);
         if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.questionId} must be a number`);
         if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.questionId} must be between 0 and ${item.max_score}`);
+      }
+      if (MEDIA_TYPES.has(item.question_type)) {
+        if (!r.evidenceFileId) throw new ApiError(422, `A captured file (evidenceFileId) is required to score media question ${r.questionId}`);
+        const ev = await client.query(
+          `SELECT evidence_file_id, status, company_id FROM evidence_file WHERE evidence_file_id = $1`,
+          [r.evidenceFileId]
+        );
+        if (!ev.rows[0]) throw new ApiError(422, `Unknown evidenceFileId for question ${r.questionId}`);
+        if (ev.rows[0].status !== "ready") throw new ApiError(422, `evidenceFileId for question ${r.questionId} has not finished uploading`);
+        if (workerCompanyId && ev.rows[0].company_id && ev.rows[0].company_id !== workerCompanyId) {
+          throw new ApiError(403, "Evidence file belongs to another company");
+        }
+        evidenceById.set(r.questionId, r.evidenceFileId);
       }
       scoreById.set(r.questionId, scoreNum);
     }
@@ -229,13 +253,24 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
       max += Number(item.max_score);
       const isCorrect = item.correct_answer_json ? scoreNum >= Number(item.max_score) : null;
       if (item.is_critical && scoreNum < Number(item.max_score)) forcedFail = true;
-      await client.query(
-        `INSERT INTO question_response (assessment_attempt_section_id, question_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      const evidenceFileId = evidenceById.get(r.questionId) ?? null;
+      const resp = await client.query(
+        `INSERT INTO question_response (assessment_attempt_section_id, question_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark, evidence_file_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (assessment_attempt_section_id, question_id) DO UPDATE SET
-           response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
-        [componentAttemptId, r.questionId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
+           response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, assessor_remark = EXCLUDED.assessor_remark, evidence_file_id = EXCLUDED.evidence_file_id, scored_at = now()
+         RETURNING question_response_id`,
+        [componentAttemptId, r.questionId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null, evidenceFileId]
       );
+      if (evidenceFileId) {
+        // Re-scoring replaces the linked artifact rather than accumulating rows
+        // (assessment_evidence has no natural unique key to ON CONFLICT on).
+        await client.query(`DELETE FROM assessment_evidence WHERE question_response_id = $1`, [resp.rows[0].question_response_id]);
+        await client.query(
+          `INSERT INTO assessment_evidence (question_response_id, evidence_file_id) VALUES ($1,$2)`,
+          [resp.rows[0].question_response_id, evidenceFileId]
+        );
+      }
     }
 
     const weightedPct = max > 0 ? Math.round(((raw / max) * 100) * 100) / 100 : 0;
@@ -288,6 +323,9 @@ export async function checkItem(componentAttemptId: string, questionId: string, 
     const item = itemRes.rows[0];
     if (!item) throw new ApiError(404, "Item not found in this component");
 
+    if (MEDIA_TYPES.has(item.question_type)) {
+      throw new ApiError(422, "Media questions are captured and graded by an assessor — they cannot be self-checked");
+    }
     const objective = computeObjectiveScore(item, responseJson);
     if (!objective) throw new ApiError(422, "This item type has no single correct answer to check — score it via the component score endpoint instead");
 
