@@ -10,6 +10,7 @@ import {
   listSubLevels, createSubLevel, updateSubLevel, deleteSubLevel,
 } from "../application/services/processConfigService.js";
 import { markProgress, listProgress } from "../application/services/subLevelProgressService.js";
+import * as cfg from "../application/services/assessmentConfigService.js";
 
 export const masterDataV2Router = Router();
 
@@ -196,8 +197,10 @@ masterDataV2Router.post(
 masterDataV2Router.get(
   "/processes/:processId/levels/:levelId/template",
   asyncHandler(async (req, res) => {
+    // Active version wins; otherwise the newest draft, so the authoring editor
+    // can work on a not-yet-activated template.
     const pkg = await queryOne<any>(
-      `SELECT * FROM assessment_template WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
+      `SELECT * FROM assessment_template WHERE process_level_id = $1 ORDER BY is_active DESC, version DESC LIMIT 1`,
       [req.params.levelId]
     );
     if (!pkg) return res.json(null);
@@ -215,6 +218,49 @@ masterDataV2Router.get(
     res.json({ ...pkg, components, roleScope });
   })
 );
+
+// ---- M4: assessment authoring (library + templates + questions) ----
+masterDataV2Router.post("/assessments", asyncHandler(async (req, res) => {
+  res.status(201).json(await cfg.createAssessment(req.body, req.currentUser!));
+}));
+masterDataV2Router.patch("/assessments/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.updateAssessment(req.params.id, req.body, req.currentUser!));
+}));
+masterDataV2Router.delete("/assessments/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.deleteAssessment(req.params.id, req.currentUser!));
+}));
+
+masterDataV2Router.post("/assessments/:id/questions", asyncHandler(async (req, res) => {
+  res.status(201).json(await cfg.addQuestion(req.params.id, req.body, req.currentUser!));
+}));
+masterDataV2Router.patch("/assessments/:id/questions/reorder", asyncHandler(async (req, res) => {
+  res.json(await cfg.reorderQuestions(req.params.id, req.body?.orderedIds, req.currentUser!));
+}));
+masterDataV2Router.patch("/questions/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.updateQuestion(req.params.id, req.body, req.currentUser!));
+}));
+masterDataV2Router.delete("/questions/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.deleteQuestion(req.params.id, req.currentUser!));
+}));
+
+masterDataV2Router.post("/assessment-templates", asyncHandler(async (req, res) => {
+  res.status(201).json(await cfg.createTemplate(String(req.body?.processLevelId ?? ""), req.currentUser!));
+}));
+masterDataV2Router.delete("/assessment-templates/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.deleteTemplate(req.params.id, req.currentUser!));
+}));
+masterDataV2Router.post("/assessment-templates/:id/activate", asyncHandler(async (req, res) => {
+  res.json(await cfg.activateTemplate(req.params.id, req.currentUser!));
+}));
+masterDataV2Router.post("/assessment-templates/:id/assessments", asyncHandler(async (req, res) => {
+  res.status(201).json(await cfg.addTemplateAssessment(req.params.id, req.body, req.currentUser!));
+}));
+masterDataV2Router.patch("/assessment-template-assessments/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.updateTemplateAssessment(req.params.id, req.body, req.currentUser!));
+}));
+masterDataV2Router.delete("/assessment-template-assessments/:id", asyncHandler(async (req, res) => {
+  res.json(await cfg.removeTemplateAssessment(req.params.id, req.currentUser!));
+}));
 
 masterDataV2Router.get(
   "/assessments",

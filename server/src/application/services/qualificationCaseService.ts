@@ -361,7 +361,8 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
     if (attempt.rows[0].status !== "in_progress") throw new ApiError(422, `Cannot finalize an attempt with status ${attempt.rows[0].status}`);
 
     const componentAttempts = await client.query(
-      `SELECT ca.*, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled, ad.name AS definition_name
+      `SELECT ca.*, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled,
+              apc.is_critical AS link_is_critical, apc.auto_fail_on_gate_miss, ad.name AS definition_name
        FROM assessment_attempt_section ca
        JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
        JOIN assessment ad ON ad.assessment_id = apc.assessment_id
@@ -428,9 +429,15 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
       const weightedPct = Math.round(((rawPct / 100) * weightPct) * 100) / 100;
       const gatePct = c.min_gate_pct != null ? Number(c.min_gate_pct) : null;
       const gatePassed = gatePct != null ? rawPct >= gatePct : null;
-      if (c.forced_fail || gatePassed === false) forcedFail = true;
+      // A gate miss force-fails the whole qualification only when the link says
+      // so — auto_fail_on_gate_miss (default true, = legacy behaviour) or the
+      // link being marked critical. A per-question critical miss (forced_fail)
+      // always force-fails. (M4 migration 0016.)
+      const gateMissFails = gatePassed === false && (c.auto_fail_on_gate_miss !== false || c.link_is_critical === true);
+      const componentFailed = c.forced_fail === true || gateMissFails;
+      if (componentFailed) forcedFail = true;
       weightedTotal += weightedPct;
-      componentResults.push({ componentAttemptId: c.assessment_attempt_section_id, rawPct: Math.round(rawPct * 100) / 100, weightPct, weightedPct, gatePct, gatePassed, status: (c.forced_fail || gatePassed === false) ? "FAIL" : "PASS" });
+      componentResults.push({ componentAttemptId: c.assessment_attempt_section_id, rawPct: Math.round(rawPct * 100) / 100, weightPct, weightedPct, gatePct, gatePassed, status: componentFailed ? "FAIL" : "PASS" });
     }
     weightedTotal = Math.round(weightedTotal * 100) / 100;
     const result: "PASS" | "FAIL" = !forcedFail && weightedTotal >= passThreshold ? "PASS" : "FAIL";
