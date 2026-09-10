@@ -43,6 +43,25 @@ app.get("/health/ready", async (_req, res) => {
   }
 });
 
+// Which build is actually running. Render injects RENDER_GIT_* automatically;
+// `latestMigration` is the real proof the DB moved with the code.
+const BOOT_TIME = new Date().toISOString();
+app.get("/health/version", async (_req, res) => {
+  let latestMigration: string | null = null;
+  try {
+    const r = await pool.query("SELECT name FROM pgmigrations ORDER BY run_on DESC, id DESC LIMIT 1");
+    latestMigration = r.rows[0]?.name ?? null;
+  } catch {
+    /* db down — leave null */
+  }
+  res.json({
+    commit: process.env.RENDER_GIT_COMMIT ?? "local",
+    branch: process.env.RENDER_GIT_BRANCH ?? null,
+    bootedAt: BOOT_TIME,
+    latestMigration,
+  });
+});
+
 const v1 = express.Router();
 
 // ---- Unauthenticated: dev login, worker-portal identification/verification,
