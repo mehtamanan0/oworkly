@@ -8,10 +8,10 @@ import { Button } from "../../components/figma/Button";
 import { qual, idempotencyKey } from "../../lib/apiV2";
 
 interface ComponentAttempt {
-  assessment_component_attempt_id: string;
-  assessment_definition_id: string;
+  assessment_attempt_section_id: string;
+  assessment_id: string;
   name: string;
-  component_type: string;
+  assessment_type: string;
   weight_pct: string;
   min_gate_pct: string | null;
   self_assessment_enabled: boolean;
@@ -22,8 +22,8 @@ interface AttemptDetail {
   componentAttempts: ComponentAttempt[];
 }
 interface Item {
-  assessment_item_id: string;
-  item_type: string;
+  question_id: string;
+  question_type: string;
   prompt: string;
   options_json: { key: string; text: string }[] | null;
   max_score: string;
@@ -44,19 +44,19 @@ export function Evaluate() {
   const current = mandatorySteps[componentIndex];
 
   const { data: items } = useQuery({
-    queryKey: ["items", current?.assessment_component_attempt_id],
-    queryFn: () => qual.get<Item[]>(`/assessment-component-attempts/${current!.assessment_component_attempt_id}/items`),
+    queryKey: ["items", current?.assessment_attempt_section_id],
+    queryFn: () => qual.get<Item[]>(`/assessment-attempt-sections/${current!.assessment_attempt_section_id}/items`),
     enabled: !!current,
   });
 
   const submitComponent = useMutation({
     mutationFn: () => {
       const responses = (items ?? []).map((it) => ({
-        assessmentItemId: it.assessment_item_id,
-        score: scores[it.assessment_item_id] ?? 0,
+        questionId: it.question_id,
+        score: scores[it.question_id] ?? 0,
         assessorRemark: remarks || undefined,
       }));
-      return qual.post(`/assessment-component-attempts/${current!.assessment_component_attempt_id}/score`, { responses }, idempotencyKey("ui-score"));
+      return qual.post(`/assessment-attempt-sections/${current!.assessment_attempt_section_id}/score`, { responses }, idempotencyKey("ui-score"));
     },
     onMutate: () => setSubmitting(true),
     onSuccess: async () => {
@@ -81,15 +81,15 @@ export function Evaluate() {
     );
   }
 
-  const allAnswered = items.length > 0 && items.every((it) => scores[it.assessment_item_id] !== undefined);
-  const isRating = items[0]?.item_type === "RATING_1_5";
+  const allAnswered = items.length > 0 && items.every((it) => scores[it.question_id] !== undefined);
+  const isRating = items[0]?.question_type === "RATING_1_5";
 
   return (
     <AppShell breadcrumbs={[{ label: "Assessments" }, { label: "Evaluate" }]}>
       <div className="mb-4">
         <div className="flex items-center justify-between text-xs">
           <span className="font-semibold uppercase tracking-wide text-fig-blue">
-            {current.component_type} Assessment · Weight: {current.weight_pct}%
+            {current.assessment_type} Assessment · Weight: {current.weight_pct}%
           </span>
           <span className="text-fig-muted">Date {new Date().toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</span>
         </div>
@@ -120,11 +120,11 @@ export function Evaluate() {
             <RatingGridHeader />
             {items.map((it) => (
               <RatingRow
-                key={it.assessment_item_id}
+                key={it.question_id}
                 title={it.prompt.split(" — ")[0]}
                 description={it.prompt.includes(" — ") ? it.prompt.split(" — ").slice(1).join(" — ") : undefined}
-                value={scores[it.assessment_item_id] ?? null}
-                onChange={(v) => setScores((s) => ({ ...s, [it.assessment_item_id]: v }))}
+                value={scores[it.question_id] ?? null}
+                onChange={(v) => setScores((s) => ({ ...s, [it.question_id]: v }))}
               />
             ))}
           </>
@@ -137,7 +137,7 @@ export function Evaluate() {
           // Left as an honest placeholder rather than a working-looking but
           // wrong scoring path.
           <div className="rounded-lg border border-dashed border-fig-border p-6 text-center text-sm text-fig-muted">
-            This item type ({items[0]?.item_type}) isn't evaluatable from this screen yet.
+            This item type ({items[0]?.question_type}) isn't evaluatable from this screen yet.
           </div>
         )}
       </div>

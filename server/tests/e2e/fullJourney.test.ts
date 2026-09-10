@@ -67,12 +67,12 @@ describe("full E2E journey: Rajesh Kumar BRA E2 -> E3", () => {
     expect(mandatoryComponents).toHaveLength(3);
 
     for (const component of mandatoryComponents) {
-      const itemsRes = await agent.get(`/api/v1/v2/assessment-component-attempts/${component.assessment_component_attempt_id}/items`).set("Authorization", `Bearer ${supervisor.accessToken}`);
-      const responses = itemsRes.body.map((it: any) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score }));
+      const itemsRes = await agent.get(`/api/v1/v2/assessment-attempt-sections/${component.assessment_attempt_section_id}/items`).set("Authorization", `Bearer ${supervisor.accessToken}`);
+      const responses = itemsRes.body.map((it: any) => ({ questionId: it.question_id, score: it.max_score }));
       const scoreRes = await agent
-        .post(`/api/v1/v2/assessment-component-attempts/${component.assessment_component_attempt_id}/score`)
+        .post(`/api/v1/v2/assessment-attempt-sections/${component.assessment_attempt_section_id}/score`)
         .set("Authorization", `Bearer ${supervisor.accessToken}`)
-        .set("Idempotency-Key", `test-e2e-score-${component.assessment_component_attempt_id}`)
+        .set("Idempotency-Key", `test-e2e-score-${component.assessment_attempt_section_id}`)
         .send({ responses });
       expect(scoreRes.status).toBe(200);
       expect(scoreRes.body.weightedPct).toBe(100);
@@ -178,19 +178,19 @@ describe("full E2E journey: Rajesh Kumar BRA E2 -> E3", () => {
     const selfComponent = selfAttemptDetail.body.componentAttempts.find((c: any) => c.self_assessment_enabled);
     expect(selfComponent).toBeTruthy();
 
-    const selfItemsRes = await agent.get(`/api/v1/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/items`).set("Authorization", `Bearer ${workerToken}`);
+    const selfItemsRes = await agent.get(`/api/v1/v2/assessment-attempt-sections/${selfComponent.assessment_attempt_section_id}/items`).set("Authorization", `Bearer ${workerToken}`);
     // MCQ items are server-graded from responseJson, never trusted from a
     // client-submitted score — look up the real correct option the same way
     // getCorrectOptionKey does (inlined here to avoid importing a test-only
     // helper into the e2e file for one query).
     const selfResponses = await Promise.all(
       selfItemsRes.body.map(async (it: any) => {
-        const row = await pool.query(`SELECT correct_answer_json FROM assessment_item WHERE assessment_item_id = $1`, [it.assessment_item_id]);
-        return { assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: row.rows[0].correct_answer_json[0] } };
+        const row = await pool.query(`SELECT correct_answer_json FROM question WHERE question_id = $1`, [it.question_id]);
+        return { questionId: it.question_id, score: it.max_score, responseJson: { chosen: row.rows[0].correct_answer_json[0] } };
       })
     );
     const selfScoreRes = await agent
-      .post(`/api/v1/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/score`)
+      .post(`/api/v1/v2/assessment-attempt-sections/${selfComponent.assessment_attempt_section_id}/score`)
       .set("Authorization", `Bearer ${workerToken}`)
       .set("Idempotency-Key", "test-e2e-self-score")
       .send({ responses: selfResponses });

@@ -103,7 +103,7 @@ masterDataV2Router.get(
     scopedCompanyId(req, process.company_id);
     const levels = await query<any>(
       `SELECT pl.*, pld.code AS primary_level_code, pld.label AS primary_level_label,
-              (SELECT count(*) FROM assessment_package ap WHERE ap.process_level_id = pl.process_level_id AND ap.is_active)::int AS linked_package_count
+              (SELECT count(*) FROM assessment_template ap WHERE ap.process_level_id = pl.process_level_id AND ap.is_active)::int AS linked_template_count
        FROM process_level pl LEFT JOIN primary_level_definition pld ON pld.primary_level_id = pl.primary_level_id
        WHERE pl.process_id = $1 ORDER BY pl.ordinal`,
       [req.params.id]
@@ -117,37 +117,37 @@ masterDataV2Router.get(
 );
 
 masterDataV2Router.get(
-  "/processes/:processId/levels/:levelId/package",
+  "/processes/:processId/levels/:levelId/template",
   asyncHandler(async (req, res) => {
     const pkg = await queryOne<any>(
-      `SELECT * FROM assessment_package WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
+      `SELECT * FROM assessment_template WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
       [req.params.levelId]
     );
     if (!pkg) return res.json(null);
     const components = await query<any>(
-      `SELECT apc.*, ad.name, ad.description, ad.component_type,
-              (SELECT count(*) FROM assessment_item ai WHERE ai.assessment_definition_id = apc.assessment_definition_id AND ai.is_active)::int AS item_count
-       FROM assessment_package_component apc JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
-       WHERE apc.assessment_package_id = $1 ORDER BY apc.sequence_no`,
-      [pkg.assessment_package_id]
+      `SELECT apc.*, ad.name, ad.description, ad.assessment_type,
+              (SELECT count(*) FROM question ai WHERE ai.assessment_id = apc.assessment_id AND ai.is_active)::int AS item_count
+       FROM assessment_template_assessment apc JOIN assessment ad ON ad.assessment_id = apc.assessment_id
+       WHERE apc.assessment_template_id = $1 ORDER BY apc.sequence_no`,
+      [pkg.assessment_template_id]
     );
     const roleScope = await query<any>(
-      `SELECT ars.capacity, r.role_code, r.role_name FROM assessment_role_scope ars JOIN role r ON r.role_id = ars.role_id WHERE ars.assessment_package_id = $1`,
-      [pkg.assessment_package_id]
+      `SELECT ars.capacity, r.role_code, r.role_name FROM assessment_template_role_scope ars JOIN role r ON r.role_id = ars.role_id WHERE ars.assessment_template_id = $1`,
+      [pkg.assessment_template_id]
     );
     res.json({ ...pkg, components, roleScope });
   })
 );
 
 masterDataV2Router.get(
-  "/assessment-definitions",
+  "/assessments",
   asyncHandler(async (req, res) => {
     const companyId = req.currentUser?.companyId;
     const rows = await query<any>(
       `SELECT ad.*,
-              (SELECT count(*) FROM assessment_item ai WHERE ai.assessment_definition_id = ad.assessment_definition_id AND ai.is_active)::int AS item_count,
-              (SELECT ai.item_type FROM assessment_item ai WHERE ai.assessment_definition_id = ad.assessment_definition_id AND ai.is_active LIMIT 1) AS sample_item_type
-       FROM assessment_definition ad
+              (SELECT count(*) FROM question ai WHERE ai.assessment_id = ad.assessment_id AND ai.is_active)::int AS item_count,
+              (SELECT ai.question_type FROM question ai WHERE ai.assessment_id = ad.assessment_id AND ai.is_active LIMIT 1) AS sample_question_type
+       FROM assessment ad
        ${companyId ? "WHERE ad.company_id = $1" : ""}
        ORDER BY ad.name`,
       companyId ? [companyId] : []
@@ -157,9 +157,9 @@ masterDataV2Router.get(
 );
 
 masterDataV2Router.get(
-  "/assessment-definitions/:id/items",
+  "/assessments/:id/items",
   asyncHandler(async (req, res) => {
-    const items = await query<any>(`SELECT * FROM assessment_item WHERE assessment_definition_id = $1 ORDER BY sequence_no`, [req.params.id]);
+    const items = await query<any>(`SELECT * FROM question WHERE assessment_id = $1 ORDER BY sequence_no`, [req.params.id]);
     res.json(items);
   })
 );

@@ -67,22 +67,22 @@ async function upsertProcessLevel({ processId, code, name, ordinal, primaryLevel
 }
 
 async function upsertAssessmentDefinition({ name, description, componentType }) {
-  const existing = await client.query(`SELECT assessment_definition_id FROM assessment_definition WHERE company_id = $1 AND name = $2`, [CWE, name]);
-  if (existing.rows[0]) return existing.rows[0].assessment_definition_id;
+  const existing = await client.query(`SELECT assessment_id FROM assessment WHERE company_id = $1 AND name = $2`, [CWE, name]);
+  if (existing.rows[0]) return existing.rows[0].assessment_id;
   const res = await client.query(
-    `INSERT INTO assessment_definition (company_id, name, description, component_type) VALUES ($1,$2,$3,$4) RETURNING assessment_definition_id`,
+    `INSERT INTO assessment (company_id, name, description, assessment_type) VALUES ($1,$2,$3,$4) RETURNING assessment_id`,
     [CWE, name, description, componentType]
   );
-  return res.rows[0].assessment_definition_id;
+  return res.rows[0].assessment_id;
 }
 
 async function addItems(definitionId, items, defaultEvaluatorCapacity = "SUPERVISOR_ASSESSOR") {
-  const existing = await client.query(`SELECT 1 FROM assessment_item WHERE assessment_definition_id = $1 LIMIT 1`, [definitionId]);
+  const existing = await client.query(`SELECT 1 FROM question WHERE assessment_id = $1 LIMIT 1`, [definitionId]);
   if (existing.rows[0]) return;
   let seq = 1;
   for (const item of items) {
     await client.query(
-      `INSERT INTO assessment_item (assessment_definition_id, item_type, prompt, options_json, correct_answer_json, explanation, max_score, rating_scale_max, is_critical, evaluator_capacity, sequence_no)
+      `INSERT INTO question (assessment_id, question_type, prompt, options_json, correct_answer_json, explanation, max_score, rating_scale_max, is_critical, evaluator_capacity, sequence_no)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         definitionId, item.type, item.prompt,
@@ -97,18 +97,18 @@ async function addItems(definitionId, items, defaultEvaluatorCapacity = "SUPERVI
 }
 
 async function upsertPackage({ processLevelId, components }) {
-  const existing = await client.query(`SELECT assessment_package_id FROM assessment_package WHERE process_level_id = $1 AND version = 1`, [processLevelId]);
+  const existing = await client.query(`SELECT assessment_template_id FROM assessment_template WHERE process_level_id = $1 AND version = 1`, [processLevelId]);
   const packageId = existing.rows[0]
-    ? existing.rows[0].assessment_package_id
+    ? existing.rows[0].assessment_template_id
     : (await client.query(
-        `INSERT INTO assessment_package (company_id, process_level_id, version) VALUES ($1,$2,1) RETURNING assessment_package_id`,
+        `INSERT INTO assessment_template (company_id, process_level_id, version) VALUES ($1,$2,1) RETURNING assessment_template_id`,
         [CWE, processLevelId]
-      )).rows[0].assessment_package_id;
-  await client.query(`DELETE FROM assessment_package_component WHERE assessment_package_id = $1`, [packageId]);
+      )).rows[0].assessment_template_id;
+  await client.query(`DELETE FROM assessment_template_assessment WHERE assessment_template_id = $1`, [packageId]);
   let seq = 1;
   for (const c of components) {
     await client.query(
-      `INSERT INTO assessment_package_component (assessment_package_id, assessment_definition_id, sequence_no, weight_pct, min_gate_pct, is_mandatory, self_assessment_enabled)
+      `INSERT INTO assessment_template_assessment (assessment_template_id, assessment_id, sequence_no, weight_pct, min_gate_pct, is_mandatory, self_assessment_enabled)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [packageId, c.definitionId, seq++, c.weightPct, c.gatePct ?? null, c.mandatory ?? true, c.selfAssess ?? false]
     );
@@ -293,7 +293,7 @@ async function main() {
   const roleIds = Object.fromEntries((await client.query(`SELECT role_id, role_code FROM role`)).rows.map((r) => [r.role_code, r.role_id]));
   for (const [roleCode, capacity] of [["EMPLOYEE", "CAN_TAKE"], ["SUPERVISOR", "CAN_EVALUATE"], ["ASSESSOR", "CAN_EVALUATE"], ["TRAINER", "CAN_EVALUATE"]]) {
     await client.query(
-      `INSERT INTO assessment_role_scope (assessment_package_id, role_id, capacity) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+      `INSERT INTO assessment_template_role_scope (assessment_template_id, role_id, capacity) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
       [braE3Package, roleIds[roleCode], capacity]
     );
   }

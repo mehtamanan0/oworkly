@@ -8,12 +8,12 @@ import { Button } from "../../components/figma/Button";
 import { v2 } from "../../lib/apiV2";
 
 interface Definition {
-  assessment_definition_id: string;
+  assessment_id: string;
   name: string;
   description: string;
-  component_type: string;
+  assessment_type: string;
   item_count: number;
-  sample_item_type: string | null;
+  sample_question_type: string | null;
 }
 interface ProcessRow {
   process_id: string;
@@ -26,17 +26,17 @@ interface Level {
   name: string;
 }
 interface PackageComponent {
-  assessment_package_component_id: string;
+  assessment_template_assessment_id: string;
   name: string;
-  component_type: string;
+  assessment_type: string;
   weight_pct: string;
   min_gate_pct: string | null;
   self_assessment_enabled: boolean;
   item_count: number;
 }
 interface Item {
-  assessment_item_id: string;
-  item_type: string;
+  question_id: string;
+  question_type: string;
   prompt: string;
   max_score: string;
   rating_scale_max: number | null;
@@ -49,7 +49,7 @@ export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "qu
   const navigate = useNavigate();
   const params = useParams();
 
-  const { data: definitions } = useQuery({ queryKey: ["assessment-definitions"], queryFn: () => v2.get<Definition[]>("/assessment-definitions") });
+  const { data: definitions } = useQuery({ queryKey: ["assessments"], queryFn: () => v2.get<Definition[]>("/assessments") });
   const { data: processes } = useQuery({ queryKey: ["processes"], queryFn: () => v2.get<ProcessRow[]>("/processes") });
 
   return (
@@ -96,25 +96,25 @@ function LibraryTab({ definitions }: { definitions?: Definition[] }) {
         </thead>
         <tbody>
           {definitions?.map((d) => (
-            <tr key={d.assessment_definition_id} className="border-b border-fig-border last:border-b-0">
+            <tr key={d.assessment_id} className="border-b border-fig-border last:border-b-0">
               <td className="px-5 py-3">
                 <div className="font-medium text-fig-text">{d.name}</div>
                 <div className="text-xs text-fig-muted">{d.description}</div>
               </td>
               <td className="px-3 py-3">
-                <span className={`rounded px-2 py-0.5 text-xs font-medium ${TYPE_TONE[d.component_type] ?? "bg-fig-bg text-fig-muted"}`}>{d.component_type}</span>
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${TYPE_TONE[d.assessment_type] ?? "bg-fig-bg text-fig-muted"}`}>{d.assessment_type}</span>
               </td>
               <td className="px-3 py-3">
                 {d.item_count > 0 ? (
                   <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-fig-blue">
-                    {d.item_count} {d.sample_item_type === "MCQ_SINGLE" ? "MCQ" : "Rating"}
+                    {d.item_count} {d.sample_question_type === "MCQ_SINGLE" ? "MCQ" : "Rating"}
                   </span>
                 ) : (
                   <span className="text-xs text-fig-muted">No questions</span>
                 )}
               </td>
               <td className="px-3 py-3 text-right">
-                <button onClick={() => navigate(`/admin/assessments/question-bank/${d.assessment_definition_id}`)} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-medium text-fig-blue">
+                <button onClick={() => navigate(`/admin/assessments/question-bank/${d.assessment_id}`)} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-medium text-fig-blue">
                   Questions
                 </button>
               </td>
@@ -140,7 +140,7 @@ function LevelLinksTab({ processes }: { processes?: ProcessRow[] }) {
 
   const { data: pkg } = useQuery({
     queryKey: ["package", activeProcessId, activeLevelId],
-    queryFn: () => v2.get<{ components: PackageComponent[] } | null>(`/processes/${activeProcessId}/levels/${activeLevelId}/package`),
+    queryFn: () => v2.get<{ components: PackageComponent[] } | null>(`/processes/${activeProcessId}/levels/${activeLevelId}/template`),
     enabled: !!activeProcessId && !!activeLevelId,
   });
 
@@ -203,13 +203,13 @@ function LevelLinksTab({ processes }: { processes?: ProcessRow[] }) {
               </thead>
               <tbody>
                 {pkg.components.map((c) => (
-                  <tr key={c.assessment_package_component_id} className="border-b border-fig-border last:border-b-0">
+                  <tr key={c.assessment_template_assessment_id} className="border-b border-fig-border last:border-b-0">
                     <td className="px-5 py-3">
                       <div className="font-medium text-fig-text">{c.name}</div>
                       <div className="text-xs text-fig-muted">{c.item_count} questions</div>
                     </td>
                     <td className="px-3 py-3">
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${TYPE_TONE[c.component_type] ?? "bg-fig-bg text-fig-muted"}`}>{c.component_type}</span>
+                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${TYPE_TONE[c.assessment_type] ?? "bg-fig-bg text-fig-muted"}`}>{c.assessment_type}</span>
                     </td>
                     <td className="px-3 py-3 font-bold text-fig-text">{Number(c.weight_pct).toFixed(0)}%</td>
                     <td className="px-3 py-3 text-fig-text">{c.min_gate_pct ? `${Number(c.min_gate_pct).toFixed(0)}%` : "—"}</td>
@@ -231,12 +231,12 @@ function LevelLinksTab({ processes }: { processes?: ProcessRow[] }) {
 
 function QuestionBankTab({ definitions, initialId }: { definitions?: Definition[]; initialId?: string }) {
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
-  const activeId = selectedId ?? definitions?.[0]?.assessment_definition_id;
-  const activeDef = definitions?.find((d) => d.assessment_definition_id === activeId);
+  const activeId = selectedId ?? definitions?.[0]?.assessment_id;
+  const activeDef = definitions?.find((d) => d.assessment_id === activeId);
 
   const { data: items } = useQuery({
     queryKey: ["definition-items", activeId],
-    queryFn: () => v2.get<Item[]>(`/assessment-definitions/${activeId}/items`),
+    queryFn: () => v2.get<Item[]>(`/assessments/${activeId}/items`),
     enabled: !!activeId,
   });
 
@@ -247,8 +247,8 @@ function QuestionBankTab({ definitions, initialId }: { definitions?: Definition[
           <label className="mb-1 block text-xs font-medium text-fig-muted">Assessment</label>
           <select className="w-full rounded-lg border border-fig-border px-3 py-2 text-sm" value={activeId ?? ""} onChange={(e) => setSelectedId(e.target.value)}>
             {definitions?.map((d) => (
-              <option key={d.assessment_definition_id} value={d.assessment_definition_id}>
-                {d.name} ({d.component_type})
+              <option key={d.assessment_id} value={d.assessment_id}>
+                {d.name} ({d.assessment_type})
               </option>
             ))}
           </select>
@@ -260,20 +260,20 @@ function QuestionBankTab({ definitions, initialId }: { definitions?: Definition[
         <SectionCard
           title={
             <span>
-              📖 {activeDef.name} <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-fig-blue">{activeDef.component_type}</span>
+              📖 {activeDef.name} <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-fig-blue">{activeDef.assessment_type}</span>
             </span>
           }
-          action={<span className="text-xs text-fig-muted">{items?.length ?? 0} {activeDef.sample_item_type === "MCQ_SINGLE" ? "MCQ" : "Rating"} (max {items?.reduce((s, it) => s + Number(it.max_score), 0)} marks)</span>}
+          action={<span className="text-xs text-fig-muted">{items?.length ?? 0} {activeDef.sample_question_type === "MCQ_SINGLE" ? "MCQ" : "Rating"} (max {items?.reduce((s, it) => s + Number(it.max_score), 0)} marks)</span>}
           padded={false}
         >
           {items?.map((it, i) => (
-            <div key={it.assessment_item_id} className="flex items-start gap-3 border-b border-fig-border px-5 py-3.5 last:border-b-0">
+            <div key={it.question_id} className="flex items-start gap-3 border-b border-fig-border px-5 py-3.5 last:border-b-0">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-fig-bg text-xs font-semibold text-fig-muted">{i + 1}</span>
               <div className="flex-1">
-                <span className="mr-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-fig-blue">{it.item_type === "RATING_1_5" ? "Rating" : it.item_type}</span>
+                <span className="mr-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-fig-blue">{it.question_type === "RATING_1_5" ? "Rating" : it.question_type}</span>
                 <span className="text-sm font-medium text-fig-text">{it.prompt}</span>
                 <div className="mt-0.5 text-xs text-fig-muted">
-                  {it.item_type === "RATING_1_5" ? "Rating 1–5 · assessor adds remark per question" : `Max ${it.max_score} marks`}
+                  {it.question_type === "RATING_1_5" ? "Rating 1–5 · assessor adds remark per question" : `Max ${it.max_score} marks`}
                 </div>
               </div>
             </div>

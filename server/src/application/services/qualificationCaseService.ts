@@ -49,8 +49,8 @@ export async function createOrGetCase(workerId: string, processId: string, targe
     `SELECT current_process_level_id FROM worker_process_enrollment WHERE worker_id = $1 AND process_id = $2`,
     [workerId, processId]
   );
-  const activePackage = await queryOne<{ assessment_package_id: string }>(
-    `SELECT assessment_package_id FROM assessment_package WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
+  const activePackage = await queryOne<{ assessment_template_id: string }>(
+    `SELECT assessment_template_id FROM assessment_template WHERE process_level_id = $1 AND is_active ORDER BY version DESC LIMIT 1`,
     [targetProcessLevelId]
   );
   if (!activePackage) throw new ApiError(422, "No active assessment package configured for this process level");
@@ -64,9 +64,9 @@ export async function createOrGetCase(workerId: string, processId: string, targe
 
   const qualificationNumber = `QID-${randomUUID().slice(0, 8).toUpperCase()}`;
   const created = await queryOne(
-    `INSERT INTO qualification_case (company_id, worker_id, process_id, from_process_level_id, target_process_level_id, assessment_package_id, status, qualification_number)
+    `INSERT INTO qualification_case (company_id, worker_id, process_id, from_process_level_id, target_process_level_id, assessment_template_id, status, qualification_number)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [worker.company_id, workerId, processId, current?.current_process_level_id ?? null, targetProcessLevelId, activePackage.assessment_package_id, status, qualificationNumber]
+    [worker.company_id, workerId, processId, current?.current_process_level_id ?? null, targetProcessLevelId, activePackage.assessment_template_id, status, qualificationNumber]
   );
   await recordAudit(pool, {
     entityName: "qualification_case", entityId: created!.qualification_case_id, action: "INSERT", actorUserId: currentUser.userId, after: created,
@@ -94,9 +94,9 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
 
     const priorCount = await client.query(`SELECT count(*) AS cnt FROM assessment_attempt WHERE qualification_case_id = $1`, [qualificationCaseId]);
     const attempt = await client.query(
-      `INSERT INTO assessment_attempt (qualification_case_id, assessment_package_id, worker_id, attempt_no, status, client_idempotency_key, started_at)
+      `INSERT INTO assessment_attempt (qualification_case_id, assessment_template_id, worker_id, attempt_no, status, client_idempotency_key, started_at)
        VALUES ($1,$2,$3,$4,'in_progress',$5,now()) RETURNING *`,
-      [qualificationCaseId, qcase.rows[0].assessment_package_id, qcase.rows[0].worker_id, Number(priorCount.rows[0].cnt) + 1, clientIdempotencyKey ?? null]
+      [qualificationCaseId, qcase.rows[0].assessment_template_id, qcase.rows[0].worker_id, Number(priorCount.rows[0].cnt) + 1, clientIdempotencyKey ?? null]
     );
 
     // A self-assessment start only ever gets the self-assessment-enabled
@@ -105,15 +105,15 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
     // would reject any attempt to score them), so there is no reason to
     // create pending rows for them here.
     const components = await client.query(
-      `SELECT assessment_package_component_id FROM assessment_package_component
-       WHERE assessment_package_id = $1 ${isSelfAssessmentStart ? "AND self_assessment_enabled" : ""}
+      `SELECT assessment_template_assessment_id FROM assessment_template_assessment
+       WHERE assessment_template_id = $1 ${isSelfAssessmentStart ? "AND self_assessment_enabled" : ""}
        ORDER BY sequence_no`,
-      [qcase.rows[0].assessment_package_id]
+      [qcase.rows[0].assessment_template_id]
     );
     for (const c of components.rows) {
       await client.query(
-        `INSERT INTO assessment_component_attempt (assessment_attempt_id, assessment_package_component_id, status) VALUES ($1,$2,'pending')`,
-        [attempt.rows[0].assessment_attempt_id, c.assessment_package_component_id]
+        `INSERT INTO assessment_attempt_section (assessment_attempt_id, assessment_template_assessment_id, status) VALUES ($1,$2,'pending')`,
+        [attempt.rows[0].assessment_attempt_id, c.assessment_template_assessment_id]
       );
     }
 
@@ -132,7 +132,7 @@ export async function startAttempt(qualificationCaseId: string, currentUser: Cur
 }
 
 interface ItemResponseInput {
-  assessmentItemId: string;
+  questionId: string;
   responseJson?: unknown;
   score: number;
   assessorRemark?: string;
@@ -148,14 +148,14 @@ interface ItemResponseInput {
 const AUTO_GRADED_TYPES = new Set(["MCQ_SINGLE", "MCQ_MULTI", "TRUE_FALSE"]);
 
 function computeObjectiveScore(
-  item: { item_type: string; correct_answer_json: unknown; max_score: number | string },
+  item: { question_type: string; correct_answer_json: unknown; max_score: number | string },
   responseJson: unknown
 ): { scoreNum: number; isCorrect: boolean } | null {
-  if (!AUTO_GRADED_TYPES.has(item.item_type) || item.correct_answer_json == null) return null;
+  if (!AUTO_GRADED_TYPES.has(item.question_type) || item.correct_answer_json == null) return null;
   const correctKeys = new Set((Array.isArray(item.correct_answer_json) ? item.correct_answer_json : [item.correct_answer_json]).map(String));
   const resp = (responseJson ?? {}) as { chosen?: string; chosenKeys?: string[] };
   const chosenKeys = new Set<string>(
-    item.item_type === "MCQ_MULTI" ? (resp.chosenKeys ?? []).map(String) : resp.chosen != null ? [String(resp.chosen)] : []
+    item.question_type === "MCQ_MULTI" ? (resp.chosenKeys ?? []).map(String) : resp.chosen != null ? [String(resp.chosen)] : []
   );
   const isCorrect = chosenKeys.size === correctKeys.size && [...chosenKeys].every((k) => correctKeys.has(k));
   return { scoreNum: isCorrect ? Number(item.max_score) : 0, isCorrect };
@@ -166,11 +166,11 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
   try {
     await client.query("BEGIN");
     const componentAttempt = await client.query(
-      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, apc.assessment_package_id, apc.assessment_definition_id, apc.is_mandatory
-       FROM assessment_component_attempt ca
+      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, apc.assessment_template_id, apc.assessment_id, apc.is_mandatory
+       FROM assessment_attempt_section ca
        JOIN assessment_attempt aa ON aa.assessment_attempt_id = ca.assessment_attempt_id
-       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
-       WHERE ca.assessment_component_attempt_id = $1 FOR UPDATE`,
+       JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
+       WHERE ca.assessment_attempt_section_id = $1 FOR UPDATE`,
       [componentAttemptId]
     );
     const row = componentAttempt.rows[0];
@@ -178,16 +178,16 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     if (row.attempt_status !== "in_progress") throw new ApiError(422, `Cannot score a component on an attempt with status ${row.attempt_status}`);
 
     const items = await client.query(
-      `SELECT assessment_item_id, item_type, max_score, is_critical, evaluator_capacity, is_mandatory, correct_answer_json FROM assessment_item
-       WHERE assessment_definition_id = $1 AND is_active AND review_status = 'approved'`,
-      [row.assessment_definition_id]
+      `SELECT question_id, question_type, max_score, is_critical, evaluator_capacity, is_mandatory, correct_answer_json FROM question
+       WHERE assessment_id = $1 AND is_active AND review_status = 'approved'`,
+      [row.assessment_id]
     );
     const processIdRow = await client.query(
       `SELECT qc.process_id FROM qualification_case qc JOIN assessment_attempt aa ON aa.qualification_case_id = qc.qualification_case_id WHERE aa.assessment_attempt_id = $1`,
       [row.assessment_attempt_id]
     );
     const processId = processIdRow.rows[0]?.process_id;
-    const itemById = new Map(items.rows.map((i) => [i.assessment_item_id, i]));
+    const itemById = new Map(items.rows.map((i) => [i.question_id, i]));
 
     // --- validation: unknown ids, duplicates, missing mandatory items, bounds ---
     // pg returns NUMERIC columns as strings (to avoid float precision loss), so
@@ -200,50 +200,50 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
     const seen = new Set<string>();
     const scoreById = new Map<string, number>();
     for (const r of responses) {
-      const item = itemById.get(r.assessmentItemId);
-      if (!item) throw new ApiError(422, `Unknown assessment_item_id: ${r.assessmentItemId}`);
-      if (seen.has(r.assessmentItemId)) throw new ApiError(422, `Duplicate response for item ${r.assessmentItemId}`);
-      seen.add(r.assessmentItemId);
+      const item = itemById.get(r.questionId);
+      if (!item) throw new ApiError(422, `Unknown question_id: ${r.questionId}`);
+      if (seen.has(r.questionId)) throw new ApiError(422, `Duplicate response for item ${r.questionId}`);
+      seen.add(r.questionId);
       const objective = computeObjectiveScore(item, r.responseJson);
       let scoreNum: number;
       if (objective) {
         scoreNum = objective.scoreNum; // server-computed — the client's submitted `score` is ignored for auto-graded items
       } else {
         scoreNum = Number(r.score);
-        if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be a number`);
-        if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.assessmentItemId} must be between 0 and ${item.max_score}`);
+        if (!Number.isFinite(scoreNum)) throw new ApiError(422, `Score for item ${r.questionId} must be a number`);
+        if (scoreNum < 0 || scoreNum > Number(item.max_score)) throw new ApiError(422, `Score for item ${r.questionId} must be between 0 and ${item.max_score}`);
       }
-      scoreById.set(r.assessmentItemId, scoreNum);
+      scoreById.set(r.questionId, scoreNum);
     }
-    const mandatoryIds = items.rows.filter((i) => i.is_mandatory).map((i) => i.assessment_item_id);
+    const mandatoryIds = items.rows.filter((i) => i.is_mandatory).map((i) => i.question_id);
     const missing = mandatoryIds.filter((id) => !seen.has(id));
     if (missing.length > 0) throw new ApiError(422, `Missing mandatory items: ${missing.join(", ")}`);
 
     let raw = 0, max = 0, forcedFail = false;
     for (const r of responses) {
-      const item = itemById.get(r.assessmentItemId)!;
-      const scoreNum = scoreById.get(r.assessmentItemId)!;
-      await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processId, row.assessment_package_id);
+      const item = itemById.get(r.questionId)!;
+      const scoreNum = scoreById.get(r.questionId)!;
+      await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processId, row.assessment_template_id);
       raw += scoreNum;
       max += Number(item.max_score);
       const isCorrect = item.correct_answer_json ? scoreNum >= Number(item.max_score) : null;
       if (item.is_critical && scoreNum < Number(item.max_score)) forcedFail = true;
       await client.query(
-        `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
+        `INSERT INTO question_response (assessment_attempt_section_id, question_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id, assessor_remark)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
+         ON CONFLICT (assessment_attempt_section_id, question_id) DO UPDATE SET
            response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
-        [componentAttemptId, r.assessmentItemId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
+        [componentAttemptId, r.questionId, r.responseJson ? JSON.stringify(r.responseJson) : null, scoreNum, item.max_score, isCorrect, item.evaluator_capacity, currentUser.userId, r.assessorRemark ?? null]
       );
     }
 
     const weightedPct = max > 0 ? Math.round(((raw / max) * 100) * 100) / 100 : 0;
     await client.query(
-      `UPDATE assessment_component_attempt SET status = 'scored', raw_score = $1, max_possible_score = $2, weighted_pct = $3, forced_fail = $4, evaluator_user_id = $5, scored_at = now()
-       WHERE assessment_component_attempt_id = $6`,
+      `UPDATE assessment_attempt_section SET status = 'scored', raw_score = $1, max_possible_score = $2, weighted_pct = $3, forced_fail = $4, evaluator_user_id = $5, scored_at = now()
+       WHERE assessment_attempt_section_id = $6`,
       [raw, max, weightedPct, forcedFail, currentUser.userId, componentAttemptId]
     );
-    await recordAudit(client, { entityName: "assessment_component_attempt", entityId: componentAttemptId, action: "UPDATE", actorUserId: currentUser.userId, after: { raw, max, forcedFail } });
+    await recordAudit(client, { entityName: "assessment_attempt_section", entityId: componentAttemptId, action: "UPDATE", actorUserId: currentUser.userId, after: { raw, max, forcedFail } });
     await client.query("COMMIT");
     return { raw, max, weightedPct, forcedFail };
   } catch (err) {
@@ -263,16 +263,16 @@ export async function scoreComponent(componentAttemptId: string, responses: Item
 // writes is provisional (upserted, same as scoreComponent's own rows) and
 // still has to pass through the normal scoreComponent + finalizeAttempt path
 // to actually count — this endpoint alone never finalizes anything.
-export async function checkItem(componentAttemptId: string, assessmentItemId: string, responseJson: unknown, currentUser: CurrentUser) {
+export async function checkItem(componentAttemptId: string, questionId: string, responseJson: unknown, currentUser: CurrentUser) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const componentAttempt = await client.query(
-      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, aa.assessment_attempt_id, apc.assessment_package_id, apc.assessment_definition_id
-       FROM assessment_component_attempt ca
+      `SELECT ca.*, aa.status AS attempt_status, aa.worker_id, aa.assessment_attempt_id, apc.assessment_template_id, apc.assessment_id
+       FROM assessment_attempt_section ca
        JOIN assessment_attempt aa ON aa.assessment_attempt_id = ca.assessment_attempt_id
-       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
-       WHERE ca.assessment_component_attempt_id = $1 FOR UPDATE`,
+       JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
+       WHERE ca.assessment_attempt_section_id = $1 FOR UPDATE`,
       [componentAttemptId]
     );
     const row = componentAttempt.rows[0];
@@ -280,9 +280,9 @@ export async function checkItem(componentAttemptId: string, assessmentItemId: st
     if (row.attempt_status !== "in_progress") throw new ApiError(422, `Cannot answer a component on an attempt with status ${row.attempt_status}`);
 
     const itemRes = await client.query(
-      `SELECT assessment_item_id, item_type, max_score, evaluator_capacity, correct_answer_json, explanation FROM assessment_item
-       WHERE assessment_item_id = $1 AND assessment_definition_id = $2 AND is_active AND review_status = 'approved'`,
-      [assessmentItemId, row.assessment_definition_id]
+      `SELECT question_id, question_type, max_score, evaluator_capacity, correct_answer_json, explanation FROM question
+       WHERE question_id = $1 AND assessment_id = $2 AND is_active AND review_status = 'approved'`,
+      [questionId, row.assessment_id]
     );
     const item = itemRes.rows[0];
     if (!item) throw new ApiError(404, "Item not found in this component");
@@ -294,14 +294,14 @@ export async function checkItem(componentAttemptId: string, assessmentItemId: st
       `SELECT qc.process_id FROM qualification_case qc WHERE qc.qualification_case_id = (SELECT qualification_case_id FROM assessment_attempt WHERE assessment_attempt_id = $1)`,
       [row.assessment_attempt_id]
     );
-    await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processIdRow.rows[0]?.process_id, row.assessment_package_id);
+    await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processIdRow.rows[0]?.process_id, row.assessment_template_id);
 
     await client.query(
-      `INSERT INTO assessment_item_response (assessment_component_attempt_id, assessment_item_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id)
+      `INSERT INTO question_response (assessment_attempt_section_id, question_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (assessment_component_attempt_id, assessment_item_id) DO UPDATE SET
+       ON CONFLICT (assessment_attempt_section_id, question_id) DO UPDATE SET
          response_json = EXCLUDED.response_json, raw_score = EXCLUDED.raw_score, is_correct = EXCLUDED.is_correct, evaluator_user_id = EXCLUDED.evaluator_user_id, scored_at = now()`,
-      [componentAttemptId, assessmentItemId, JSON.stringify(responseJson), objective.scoreNum, item.max_score, objective.isCorrect, item.evaluator_capacity, currentUser.userId]
+      [componentAttemptId, questionId, JSON.stringify(responseJson), objective.scoreNum, item.max_score, objective.isCorrect, item.evaluator_capacity, currentUser.userId]
     );
     await client.query("COMMIT");
     return { isCorrect: objective.isCorrect, correctAnswerKeys: item.correct_answer_json, explanation: item.explanation, maxScore: item.max_score };
@@ -323,9 +323,9 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
 
     const componentAttempts = await client.query(
       `SELECT ca.*, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled, ad.name AS definition_name
-       FROM assessment_component_attempt ca
-       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
-       JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
+       FROM assessment_attempt_section ca
+       JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
+       JOIN assessment ad ON ad.assessment_id = apc.assessment_id
        WHERE ca.assessment_attempt_id = $1`,
       [attemptId]
     );
@@ -378,7 +378,7 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
       const gatePassed = gatePct != null ? rawPct >= gatePct : null;
       if (c.forced_fail || gatePassed === false) forcedFail = true;
       weightedTotal += weightedPct;
-      componentResults.push({ componentAttemptId: c.assessment_component_attempt_id, rawPct: Math.round(rawPct * 100) / 100, weightPct, weightedPct, gatePct, gatePassed, status: (c.forced_fail || gatePassed === false) ? "FAIL" : "PASS" });
+      componentResults.push({ componentAttemptId: c.assessment_attempt_section_id, rawPct: Math.round(rawPct * 100) / 100, weightPct, weightedPct, gatePct, gatePassed, status: (c.forced_fail || gatePassed === false) ? "FAIL" : "PASS" });
     }
     weightedTotal = Math.round(weightedTotal * 100) / 100;
     const result: "PASS" | "FAIL" = !forcedFail && weightedTotal >= passThreshold ? "PASS" : "FAIL";
@@ -392,7 +392,7 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
     );
     for (const cr of componentResults) {
       await client.query(
-        `INSERT INTO qualification_component_result (qualification_result_id, assessment_component_attempt_id, raw_pct, weight_pct, weighted_pct, gate_pct, gate_passed, status)
+        `INSERT INTO qualification_component_result (qualification_result_id, assessment_attempt_section_id, raw_pct, weight_pct, weighted_pct, gate_pct, gate_passed, status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [qr.rows[0].qualification_result_id, cr.componentAttemptId, cr.rawPct, cr.weightPct, cr.weightedPct, cr.gatePct, cr.gatePassed, cr.status]
       );

@@ -41,13 +41,13 @@ export async function assertProcessScope(userId: string, roles: string[], proces
   if (!scoped) throw new ApiError(403, "Not authorized to assess this process");
 }
 
-// CAN_TAKE / CAN_EVALUATE on a specific assessment_package, resolved from
-// assessment_role_scope — never inferred from component_type alone.
-export async function assertPackageCapacity(roles: string[], assessmentPackageId: string, capacity: "CAN_TAKE" | "CAN_EVALUATE") {
+// CAN_TAKE / CAN_EVALUATE on a specific assessment_template, resolved from
+// assessment_template_role_scope — never inferred from assessment_type alone.
+export async function assertPackageCapacity(roles: string[], assessmentTemplateId: string, capacity: "CAN_TAKE" | "CAN_EVALUATE") {
   const rows = await query<{ role_code: string }>(
-    `SELECT r.role_code FROM assessment_role_scope ars JOIN role r ON r.role_id = ars.role_id
-     WHERE ars.assessment_package_id = $1 AND ars.capacity = $2`,
-    [assessmentPackageId, capacity]
+    `SELECT r.role_code FROM assessment_template_role_scope ars JOIN role r ON r.role_id = ars.role_id
+     WHERE ars.assessment_template_id = $1 AND ars.capacity = $2`,
+    [assessmentTemplateId, capacity]
   );
   const allowedRoles = rows.map((r) => r.role_code);
   if (!roles.some((r) => allowedRoles.includes(r))) {
@@ -60,7 +60,7 @@ export async function assertPackageCapacity(roles: string[], assessmentPackageId
 // scope for Assessor); TRAINER requires the Trainer role (or another role the
 // package's role scope explicitly grants CAN_EVALUATE, per the "or another
 // configured role" allowance).
-export async function assertEvaluatorCapacity(currentUser: { userId: string; roles: string[]; workerId: string | null }, evaluatorCapacity: string, targetWorkerId: string, processId: string, assessmentPackageId: string) {
+export async function assertEvaluatorCapacity(currentUser: { userId: string; roles: string[]; workerId: string | null }, evaluatorCapacity: string, targetWorkerId: string, processId: string, assessmentTemplateId: string) {
   if (evaluatorCapacity === "SELF") {
     if (currentUser.workerId !== targetWorkerId) {
       throw new ApiError(403, "Only the worker themselves may submit a SELF-capacity response");
@@ -79,7 +79,7 @@ export async function assertEvaluatorCapacity(currentUser: { userId: string; rol
   if (evaluatorCapacity === "TRAINER") {
     if (currentUser.roles.includes("TRAINER")) return;
     // "or another configured role" — check the package's own role scope.
-    await assertPackageCapacity(currentUser.roles, assessmentPackageId, "CAN_EVALUATE");
+    await assertPackageCapacity(currentUser.roles, assessmentTemplateId, "CAN_EVALUATE");
     return;
   }
   throw new ApiError(422, `Unknown evaluator_capacity: ${evaluatorCapacity}`);

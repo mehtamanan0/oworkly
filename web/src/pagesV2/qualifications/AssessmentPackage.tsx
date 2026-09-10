@@ -8,11 +8,11 @@ import { Button } from "../../components/figma/Button";
 import { qual, v2, idempotencyKey } from "../../lib/apiV2";
 
 interface PackageComponent {
-  assessment_package_component_id: string;
-  assessment_definition_id: string;
+  assessment_template_assessment_id: string;
+  assessment_id: string;
   name: string;
   description: string;
-  component_type: string;
+  assessment_type: string;
   weight_pct: string;
   min_gate_pct: string | null;
   sequence_no: number;
@@ -122,12 +122,12 @@ export function AssessmentPackage() {
 
       <div className="mb-5 grid grid-cols-3 gap-4">
         {qcase.components.map((c) => (
-          <div key={c.assessment_package_component_id} className="rounded-fig-card border border-fig-border bg-white p-4 shadow-fig-card">
+          <div key={c.assessment_template_assessment_id} className="rounded-fig-card border border-fig-border bg-white p-4 shadow-fig-card">
             <div className="mb-2 flex items-center justify-between">
               <span className="rounded bg-fig-navy px-2 py-0.5 text-xs font-semibold text-white">{c.weight_pct}% weight</span>
               <span className="text-xs text-fig-muted">⏱ Pending</span>
             </div>
-            <div className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-fig-blue">{c.component_type}</div>
+            <div className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-fig-blue">{c.assessment_type}</div>
             <div className="mb-1 text-sm font-bold text-fig-text">{c.name}</div>
             <p className="mb-2 text-xs text-fig-muted">{c.description}</p>
             <div className="text-xs text-fig-text">

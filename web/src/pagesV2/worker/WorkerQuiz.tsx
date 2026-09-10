@@ -6,7 +6,7 @@ import { qual, v2, idempotencyKey } from "../../lib/apiV2";
 import { Button } from "../../components/figma/Button";
 
 interface ComponentAttempt {
-  assessment_component_attempt_id: string;
+  assessment_attempt_section_id: string;
   self_assessment_enabled: boolean;
   min_gate_pct: string | number | null;
   name: string;
@@ -16,8 +16,8 @@ interface AttemptDetail {
   qualification_case_id: string;
 }
 interface QuizItem {
-  assessment_item_id: string;
-  item_type: string;
+  question_id: string;
+  question_type: string;
   prompt: string;
   options_json: { key: string; text: string }[] | null;
   max_score: string | number;
@@ -44,8 +44,8 @@ export function WorkerQuiz() {
   const selfComponent = attempt?.componentAttempts.find((c) => c.self_assessment_enabled);
 
   const { data: items } = useQuery({
-    queryKey: ["quiz-items", selfComponent?.assessment_component_attempt_id],
-    queryFn: () => qual.get<QuizItem[]>(`/assessment-component-attempts/${selfComponent!.assessment_component_attempt_id}/items`),
+    queryKey: ["quiz-items", selfComponent?.assessment_attempt_section_id],
+    queryFn: () => qual.get<QuizItem[]>(`/assessment-attempt-sections/${selfComponent!.assessment_attempt_section_id}/items`),
     enabled: !!selfComponent,
   });
 
@@ -57,18 +57,18 @@ export function WorkerQuiz() {
     );
   }
 
-  const componentAttemptId = selfComponent.assessment_component_attempt_id;
+  const componentAttemptId = selfComponent.assessment_attempt_section_id;
   const currentItem = items[index];
 
   async function selectOption(key: string) {
     if (feedback) return; // locked after first answer
     setSelected(key);
     const res = await qual.post<{ isCorrect: boolean; explanation: string | null; correctAnswerKeys: string[] }>(
-      `/assessment-component-attempts/${componentAttemptId}/check-item`,
-      { assessmentItemId: currentItem.assessment_item_id, responseJson: { chosen: key } }
+      `/assessment-attempt-sections/${componentAttemptId}/check-item`,
+      { questionId: currentItem.question_id, responseJson: { chosen: key } }
     );
     setFeedback(res);
-    setAnswers((prev) => ({ ...prev, [currentItem.assessment_item_id]: { chosen: key, isCorrect: res.isCorrect, correctKey: res.correctAnswerKeys?.[0] } }));
+    setAnswers((prev) => ({ ...prev, [currentItem.question_id]: { chosen: key, isCorrect: res.isCorrect, correctKey: res.correctAnswerKeys?.[0] } }));
   }
 
   async function nextQuestion() {
@@ -85,11 +85,11 @@ export function WorkerQuiz() {
     setSubmitting(true);
     try {
       const responses = items!.map((it) => ({
-        assessmentItemId: it.assessment_item_id,
-        score: answers[it.assessment_item_id]?.isCorrect ? it.max_score : 0,
-        responseJson: { chosen: answers[it.assessment_item_id]?.chosen },
+        questionId: it.question_id,
+        score: answers[it.question_id]?.isCorrect ? it.max_score : 0,
+        responseJson: { chosen: answers[it.question_id]?.chosen },
       }));
-      await qual.post(`/assessment-component-attempts/${componentAttemptId}/score`, { responses }, idempotencyKey("wp-quiz-score"));
+      await qual.post(`/assessment-attempt-sections/${componentAttemptId}/score`, { responses }, idempotencyKey("wp-quiz-score"));
       const result = await qual.post<{ passed: boolean; compositePct: number }>(`/assessment-attempts/${attemptId}/finalize`, {}, idempotencyKey("wp-quiz-finalize"));
       setFinalResult(result);
       setPhase("result");
@@ -264,9 +264,9 @@ export function WorkerQuiz() {
             <div className="mb-3 text-sm font-semibold text-fig-text">Question-by-Question Review</div>
             <div className="space-y-5">
               {items.map((it, i) => {
-                const ans = answers[it.assessment_item_id];
+                const ans = answers[it.question_id];
                 return (
-                  <div key={it.assessment_item_id}>
+                  <div key={it.question_id}>
                     <div className="flex items-start gap-2">
                       <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ${ans?.isCorrect ? "bg-fig-green" : "bg-fig-red"}`}>
                         {i + 1}

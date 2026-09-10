@@ -40,25 +40,13 @@ processesRouter.get(
        WHERE cf.process_id = $1 ORDER BY sld.ordinal`,
       [req.params.id]
     );
-    const weightage = await query(
-      `SELECT awc.*, sld.level_code FROM assessment_weightage_config awc
-       JOIN skill_level_definition sld ON sld.skill_level_id = awc.skill_level_id
-       WHERE awc.process_id = $1 ORDER BY sld.ordinal`,
-      [req.params.id]
-    );
     const retestPolicies = await query(
       `SELECT rp.*, sld.level_code FROM retest_policy rp
        JOIN skill_level_definition sld ON sld.skill_level_id = rp.skill_level_id
        WHERE rp.process_id = $1 ORDER BY sld.ordinal`,
       [req.params.id]
     );
-    const templates = await query(
-      `SELECT at.*, sld.level_code FROM assessment_template at
-       JOIN skill_level_definition sld ON sld.skill_level_id = at.skill_level_id
-       WHERE at.process_id = $1 AND at.is_active ORDER BY sld.ordinal`,
-      [req.params.id]
-    );
-    res.json({ ...process, competencyFramework: framework, weightage, retestPolicies, assessmentTemplates: templates });
+    res.json({ ...process, competencyFramework: framework, retestPolicies });
   })
 );
 

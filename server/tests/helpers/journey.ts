@@ -25,10 +25,10 @@ export async function startAttempt(token: string, qualificationCaseId: string, i
 }
 
 export async function scoreComponentFullMarks(token: string, componentAttemptId: string, idemSuffix: string) {
-  const itemsRes = await agent.get(`/api/v1/v2/assessment-component-attempts/${componentAttemptId}/items`).set("Authorization", `Bearer ${token}`);
-  const responses = itemsRes.body.map((it: any) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: "full_credit" } }));
+  const itemsRes = await agent.get(`/api/v1/v2/assessment-attempt-sections/${componentAttemptId}/items`).set("Authorization", `Bearer ${token}`);
+  const responses = itemsRes.body.map((it: any) => ({ questionId: it.question_id, score: it.max_score, responseJson: { chosen: "full_credit" } }));
   const res = await agent
-    .post(`/api/v1/v2/assessment-component-attempts/${componentAttemptId}/score`)
+    .post(`/api/v1/v2/assessment-attempt-sections/${componentAttemptId}/score`)
     .set("Authorization", `Bearer ${token}`)
     .set("Idempotency-Key", `test-score-${idemSuffix}`)
     .send({ responses });
@@ -59,7 +59,7 @@ export async function runSupervisorJourney(fixtures: Fixtures, idemSuffix: strin
   const attemptDetail = await agent.get(`/api/v1/v2/assessment-attempts/${attempt.assessment_attempt_id}`).set("Authorization", `Bearer ${supervisor.accessToken}`);
   const nonSelfComponents = attemptDetail.body.componentAttempts.filter((c: any) => !c.self_assessment_enabled);
   for (const c of nonSelfComponents) {
-    await scoreComponentFullMarks(supervisor.accessToken, c.assessment_component_attempt_id, `${idemSuffix}-${c.assessment_component_attempt_id}`);
+    await scoreComponentFullMarks(supervisor.accessToken, c.assessment_attempt_section_id, `${idemSuffix}-${c.assessment_attempt_section_id}`);
   }
 
   const finalize = await agent

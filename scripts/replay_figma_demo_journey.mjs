@@ -25,11 +25,11 @@ const DB_CONTAINER = process.env.DB_CONTAINER ?? "oworkly_lms_db";
 // read the answer key off the wire), so this script reaches into the same
 // Postgres container the server itself uses to fetch the real correct
 // option, the one way a script driving the self-assessment quiz honestly can.
-function correctOptionKey(assessmentItemId) {
+function correctOptionKey(questionId) {
   const out = execFileSync(
     "docker",
     ["exec", DB_CONTAINER, "psql", "-U", "oworkly", "-d", "oworkly_lms", "-t", "-A", "-c",
-      `SELECT correct_answer_json->>0 FROM assessment_item WHERE assessment_item_id = '${assessmentItemId}'`],
+      `SELECT correct_answer_json->>0 FROM question WHERE question_id = '${questionId}'`],
     { encoding: "utf8" }
   );
   return out.trim();
@@ -137,21 +137,21 @@ async function main() {
   ok("attempt started", { attemptId, attemptNo: attemptRes.body.attempt_no });
 
   const attemptDetail = await api("GET", `/v2/assessment-attempts/${attemptId}`, { token: supervisorToken, expectStatus: 200 });
-  const componentByType = Object.fromEntries(attemptDetail.body.componentAttempts.map((c) => [c.component_type + (c.self_assessment_enabled ? ":self" : ""), c]));
+  const componentByType = Object.fromEntries(attemptDetail.body.componentAttempts.map((c) => [c.assessment_type + (c.self_assessment_enabled ? ":self" : ""), c]));
 
   // ---------------------------------------------------------------
   // Scenario C: evaluate all 3 mandatory components -> high score -> PASS
   // ---------------------------------------------------------------
   async function scoreAll(componentAttemptId, label) {
-    const items = await api("GET", `/v2/assessment-component-attempts/${componentAttemptId}/items`, { token: supervisorToken, expectStatus: 200 });
+    const items = await api("GET", `/v2/assessment-attempt-sections/${componentAttemptId}/items`, { token: supervisorToken, expectStatus: 200 });
     assert(items.body.length > 0, `${label} must have at least one item`);
     const responses = items.body.map((it) => ({
-      assessmentItemId: it.assessment_item_id,
+      questionId: it.question_id,
       score: it.max_score, // full marks — proves the "confident PASS" screenshot path
-      responseJson: it.item_type === "RATING_1_5" ? { rating: it.rating_scale_max ?? 5 } : { chosen: "full_credit" },
+      responseJson: it.question_type === "RATING_1_5" ? { rating: it.rating_scale_max ?? 5 } : { chosen: "full_credit" },
       assessorRemark: `Demo replay: ${label} scored at max by Supervisor Sunil Mehta`,
     }));
-    const scored = await api("POST", `/v2/assessment-component-attempts/${componentAttemptId}/score`, {
+    const scored = await api("POST", `/v2/assessment-attempt-sections/${componentAttemptId}/score`, {
       token: supervisorToken,
       idempotencyKey: `demo-score-${componentAttemptId}`,
       body: { responses },
@@ -162,13 +162,13 @@ async function main() {
   }
 
   step("Evaluate: Practical component (1-5 checklist grid)");
-  await scoreAll(componentByType["PRACTICAL"].assessment_component_attempt_id, "BRA Practical Evaluation");
+  await scoreAll(componentByType["PRACTICAL"].assessment_attempt_section_id, "BRA Practical Evaluation");
 
   step("Evaluate: Theory component (Process Knowledge Test, MCQ)");
-  await scoreAll(componentByType["THEORY"].assessment_component_attempt_id, "BRA Process Knowledge Test");
+  await scoreAll(componentByType["THEORY"].assessment_attempt_section_id, "BRA Process Knowledge Test");
 
   step("Evaluate: Behavioural component (rating)");
-  await scoreAll(componentByType["BEHAVIOURAL"].assessment_component_attempt_id, "BRA Behavioural Rating");
+  await scoreAll(componentByType["BEHAVIOURAL"].assessment_attempt_section_id, "BRA Behavioural Rating");
 
   step("Finalize attempt -> expect qualification result PASS");
   const finalizeRes = await api("POST", `/v2/assessment-attempts/${attemptId}/finalize`, {
@@ -306,11 +306,11 @@ async function main() {
   const selfComponent = selfAttemptDetail.body.componentAttempts.find((c) => c.self_assessment_enabled);
   assert(selfComponent, "the package must include a self-assessment component");
 
-  const selfItems = await api("GET", `/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/items`, { token: workerToken, expectStatus: 200 });
-  const selfResponses = selfItems.body.map((it) => ({ assessmentItemId: it.assessment_item_id, score: it.max_score, responseJson: { chosen: correctOptionKey(it.assessment_item_id) } }));
-  await api("POST", `/v2/assessment-component-attempts/${selfComponent.assessment_component_attempt_id}/score`, {
+  const selfItems = await api("GET", `/v2/assessment-attempt-sections/${selfComponent.assessment_attempt_section_id}/items`, { token: workerToken, expectStatus: 200 });
+  const selfResponses = selfItems.body.map((it) => ({ questionId: it.question_id, score: it.max_score, responseJson: { chosen: correctOptionKey(it.question_id) } }));
+  await api("POST", `/v2/assessment-attempt-sections/${selfComponent.assessment_attempt_section_id}/score`, {
     token: workerToken,
-    idempotencyKey: `demo-self-score-${selfComponent.assessment_component_attempt_id}`,
+    idempotencyKey: `demo-self-score-${selfComponent.assessment_attempt_section_id}`,
     body: { responses: selfResponses },
     expectStatus: 200,
   });

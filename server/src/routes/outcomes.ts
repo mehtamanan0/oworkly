@@ -17,11 +17,7 @@ outcomesRouter.get(
       [req.params.id]
     );
     if (!outcome) throw new ApiError(404, "Outcome not found");
-    const components = await query(
-      `SELECT * FROM assessment_score_component WHERE assessment_attempt_id = $1`,
-      [(outcome as any).assessment_attempt_id]
-    );
-    res.json({ ...outcome, components });
+    res.json({ ...outcome, components: [] });
   })
 );
 

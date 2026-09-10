@@ -30,7 +30,7 @@ const TILES = [
 export function AdminOverview() {
   const { user } = useAuthV2();
   const { data: companies } = useQuery({ queryKey: ["companies"], queryFn: () => v2.get<Company[]>("/companies") });
-  const { data: assessmentDefs } = useQuery({ queryKey: ["assessment-definitions"], queryFn: () => v2.get<unknown[]>("/assessment-definitions") });
+  const { data: assessmentDefs } = useQuery({ queryKey: ["assessments"], queryFn: () => v2.get<unknown[]>("/assessments") });
   const active = companies?.find((c) => c.status === "ACTIVE") ?? companies?.[0];
   const totals = companies?.reduce(
     (acc, c) => ({ processes: acc.processes + c.process_count, workers: acc.workers + c.active_worker_count }),

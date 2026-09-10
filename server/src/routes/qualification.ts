@@ -99,13 +99,13 @@ qualificationRouter.get(
     if (user.companyId && user.companyId !== qcase.company_id) throw new ApiError(403, "Cross-company access is not permitted");
 
     const components = await query<any>(
-      `SELECT apc.*, ad.name, ad.description, ad.component_type,
-              (SELECT count(*) FROM assessment_item ai WHERE ai.assessment_definition_id = apc.assessment_definition_id AND ai.is_active AND ai.review_status = 'approved')::int AS item_count,
-              (SELECT coalesce(sum(max_score),0) FROM assessment_item ai WHERE ai.assessment_definition_id = apc.assessment_definition_id AND ai.is_active AND ai.review_status = 'approved') AS max_total_score
-       FROM assessment_package_component apc
-       JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
-       WHERE apc.assessment_package_id = $1 ORDER BY apc.sequence_no`,
-      [qcase.assessment_package_id]
+      `SELECT apc.*, ad.name, ad.description, ad.assessment_type,
+              (SELECT count(*) FROM question ai WHERE ai.assessment_id = apc.assessment_id AND ai.is_active AND ai.review_status = 'approved')::int AS item_count,
+              (SELECT coalesce(sum(max_score),0) FROM question ai WHERE ai.assessment_id = apc.assessment_id AND ai.is_active AND ai.review_status = 'approved') AS max_total_score
+       FROM assessment_template_assessment apc
+       JOIN assessment ad ON ad.assessment_id = apc.assessment_id
+       WHERE apc.assessment_template_id = $1 ORDER BY apc.sequence_no`,
+      [qcase.assessment_template_id]
     );
     const attempts = await query<any>(`SELECT * FROM assessment_attempt WHERE qualification_case_id = $1 ORDER BY attempt_no DESC`, [req.params.id]);
     const result = await queryOne<any>(`SELECT * FROM qualification_result WHERE qualification_case_id = $1 ORDER BY decided_at DESC LIMIT 1`, [req.params.id]);
@@ -114,9 +114,9 @@ qualificationRouter.get(
     if (result) {
       componentResults = await query<any>(
         `SELECT qcr.*, ad.name FROM qualification_component_result qcr
-         JOIN assessment_component_attempt aca ON aca.assessment_component_attempt_id = qcr.assessment_component_attempt_id
-         JOIN assessment_package_component apc ON apc.assessment_package_component_id = aca.assessment_package_component_id
-         JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
+         JOIN assessment_attempt_section aca ON aca.assessment_attempt_section_id = qcr.assessment_attempt_section_id
+         JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = aca.assessment_template_assessment_id
+         JOIN assessment ad ON ad.assessment_id = apc.assessment_id
          WHERE qcr.qualification_result_id = $1`,
         [result.qualification_result_id]
       );
@@ -141,8 +141,8 @@ qualificationRouter.get(
         [req.params.id]
       );
       const trainer = await queryOne<any>(
-        `SELECT u.display_name FROM assessment_component_attempt aca
-         JOIN assessment_package_component apc ON apc.assessment_package_component_id = aca.assessment_package_component_id
+        `SELECT u.display_name FROM assessment_attempt_section aca
+         JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = aca.assessment_template_assessment_id
          JOIN app_user u ON u.user_id = aca.evaluator_user_id
          WHERE aca.assessment_attempt_id IN (SELECT assessment_attempt_id FROM assessment_attempt WHERE qualification_case_id = $1)
            AND apc.self_assessment_enabled = false
@@ -170,10 +170,10 @@ qualificationRouter.get(
   "/assessment-attempts/:id",
   asyncHandler(async (req, res) => {
     const componentAttempts = await query<any>(
-      `SELECT ca.*, apc.assessment_definition_id, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled, ad.name, ad.component_type
-       FROM assessment_component_attempt ca
-       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
-       JOIN assessment_definition ad ON ad.assessment_definition_id = apc.assessment_definition_id
+      `SELECT ca.*, apc.assessment_id, apc.weight_pct, apc.min_gate_pct, apc.is_mandatory, apc.self_assessment_enabled, ad.name, ad.assessment_type
+       FROM assessment_attempt_section ca
+       JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
+       JOIN assessment ad ON ad.assessment_id = apc.assessment_id
        WHERE ca.assessment_attempt_id = $1 ORDER BY apc.sequence_no`,
       [req.params.id]
     );
@@ -184,39 +184,39 @@ qualificationRouter.get(
 );
 
 qualificationRouter.get(
-  "/assessment-component-attempts/:id/items",
+  "/assessment-attempt-sections/:id/items",
   asyncHandler(async (req, res) => {
     const componentAttempt = await queryOne<any>(
-      `SELECT apc.assessment_definition_id FROM assessment_component_attempt ca
-       JOIN assessment_package_component apc ON apc.assessment_package_component_id = ca.assessment_package_component_id
-       WHERE ca.assessment_component_attempt_id = $1`,
+      `SELECT apc.assessment_id FROM assessment_attempt_section ca
+       JOIN assessment_template_assessment apc ON apc.assessment_template_assessment_id = ca.assessment_template_assessment_id
+       WHERE ca.assessment_attempt_section_id = $1`,
       [req.params.id]
     );
     if (!componentAttempt) throw new ApiError(404, "Component attempt not found");
     const items = await query<any>(
-      `SELECT assessment_item_id, item_type, prompt, options_json, max_score, rating_scale_max, is_critical, evaluator_capacity, requires_assessor_remark, sequence_no
-       FROM assessment_item WHERE assessment_definition_id = $1 AND is_active AND review_status = 'approved' ORDER BY sequence_no`,
-      [componentAttempt.assessment_definition_id]
+      `SELECT question_id, question_type, prompt, options_json, max_score, rating_scale_max, is_critical, evaluator_capacity, requires_assessor_remark, sequence_no
+       FROM question WHERE assessment_id = $1 AND is_active AND review_status = 'approved' ORDER BY sequence_no`,
+      [componentAttempt.assessment_id]
     );
     res.json(items);
   })
 );
 
 qualificationRouter.post(
-  "/assessment-component-attempts/:id/check-item",
+  "/assessment-attempt-sections/:id/check-item",
   asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
-    const { assessmentItemId, responseJson } = req.body as { assessmentItemId: string; responseJson: unknown };
-    const result = await qualificationCaseService.checkItem(req.params.id, assessmentItemId, responseJson, user);
+    const { questionId, responseJson } = req.body as { questionId: string; responseJson: unknown };
+    const result = await qualificationCaseService.checkItem(req.params.id, questionId, responseJson, user);
     res.json(result);
   })
 );
 
 qualificationRouter.post(
-  "/assessment-component-attempts/:id/score",
-  withIdempotency("assessment-component-attempts:score", asyncHandler(async (req, res) => {
+  "/assessment-attempt-sections/:id/score",
+  withIdempotency("assessment-attempt-sections:score", asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
-    const { responses } = req.body as { responses: { assessmentItemId: string; score: number; responseJson?: unknown; assessorRemark?: string }[] };
+    const { responses } = req.body as { responses: { questionId: string; score: number; responseJson?: unknown; assessorRemark?: string }[] };
     const result = await qualificationCaseService.scoreComponent(req.params.id, responses, user);
     res.json(result);
   }))

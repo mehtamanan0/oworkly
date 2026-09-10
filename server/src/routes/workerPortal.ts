@@ -70,7 +70,7 @@ workerPortalRouter.post(
       entityName: "worker_verification_session", entityId: session.worker_verification_session_id, action: "INSERT", actorUserId: null, source: "web", after: { method, outcome: "success" },
     }).catch(() => {}); // best-effort; the session row above is the authoritative record either way
 
-    // assessment_item_response.evaluator_user_id is a real FK into app_user, so
+    // question_response.evaluator_user_id is a real FK into app_user, so
     // a worker taking a self-assessment needs a real app_user row — created
     // on first use rather than requiring every worker to be pre-provisioned
     // with a login.

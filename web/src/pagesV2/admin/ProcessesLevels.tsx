@@ -31,7 +31,7 @@ interface Level {
   min_qualification_score_pct: string | null;
   budgeted_headcount: number | null;
   primary_level_code: string | null;
-  linked_package_count: number;
+  linked_template_count: number;
 }
 
 export function ProcessesLevels() {
@@ -147,7 +147,7 @@ export function ProcessesLevels() {
                         <td className="py-3 pr-3">
                           <LevelBadge code={l.primary_level_code} />
                         </td>
-                        <td className="py-3 pr-3 text-fig-muted">{l.linked_package_count} linked</td>
+                        <td className="py-3 pr-3 text-fig-muted">{l.linked_template_count} linked</td>
                       </tr>
                     ))}
                   </tbody>

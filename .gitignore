@@ -9,3 +9,6 @@ ingestion/parsed_wtg*.json
 # from the WTG skill-matrix workbook, no secrets.
 !ingestion/parsed_wtg_full.json
 *.tsbuildinfo
+
+# Claude Code local tooling
+.claude/

@@ -6,8 +6,6 @@ import { ProcessDetail } from "./pages/ProcessDetail";
 import { SkillMatrix } from "./pages/SkillMatrix";
 import { Workers } from "./pages/Workers";
 import { WorkerDetail } from "./pages/WorkerDetail";
-import { Assessments } from "./pages/Assessments";
-import { AssessmentAttempt } from "./pages/AssessmentAttempt";
 import { Certificates } from "./pages/Certificates";
 import { CertificateVerify } from "./pages/CertificateVerify";
 import { GapAnalysis } from "./pages/GapAnalysis";
@@ -30,8 +28,6 @@ export default function App() {
               <Route path="/skill-matrix" element={<SkillMatrix />} />
               <Route path="/workers" element={<Workers />} />
               <Route path="/workers/:id" element={<WorkerDetail />} />
-              <Route path="/assessments" element={<Assessments />} />
-              <Route path="/assessments/attempts/:id" element={<AssessmentAttempt />} />
               <Route path="/certificates" element={<Certificates />} />
               <Route path="/gap-analysis" element={<GapAnalysis />} />
               <Route path="/ingestion" element={<IngestionReport />} />

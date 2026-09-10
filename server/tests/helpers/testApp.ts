@@ -106,9 +106,9 @@ export async function resetWorkerVerificationLockout(workerId: string) {
 // from a client-submitted score) — the /items API deliberately never exposes
 // correct_answer_json, so a test that wants a guaranteed-correct submission
 // has to look it up directly, the same way a real client never could.
-export async function getCorrectOptionKey(assessmentItemId: string): Promise<string> {
-  const row = await pool.query(`SELECT correct_answer_json FROM assessment_item WHERE assessment_item_id = $1`, [assessmentItemId]);
+export async function getCorrectOptionKey(questionId: string): Promise<string> {
+  const row = await pool.query(`SELECT correct_answer_json FROM question WHERE question_id = $1`, [questionId]);
   const keys = row.rows[0]?.correct_answer_json;
-  if (!Array.isArray(keys) || keys.length === 0) throw new Error(`Item ${assessmentItemId} has no correct_answer_json`);
+  if (!Array.isArray(keys) || keys.length === 0) throw new Error(`Item ${questionId} has no correct_answer_json`);
   return keys[0];
 }
