@@ -91,76 +91,13 @@ async function loadRoleMap() {
   return Object.fromEntries(res.rows.map((r) => [r.role_code, r.role_id]));
 }
 
-async function upsertAssessmentTemplate(processId, levelId, name, category, isReadinessCheck) {
-  const res = await client.query(
-    `INSERT INTO assessment_template (process_id, skill_level_id, name, assessment_category, is_readiness_check_only, theory_question_count)
-     VALUES ($1,$2,$3,$4,$5,5)
-     ON CONFLICT (process_id, skill_level_id, assessment_category, version) DO UPDATE SET name = EXCLUDED.name
-     RETURNING assessment_template_id`,
-    [processId, levelId, name, category, isReadinessCheck]
-  );
-  return res.rows[0].assessment_template_id;
-}
-
-async function seedRoleScope(templateId, entries, roleIdByCode) {
-  for (const [roleCode, capacity] of entries) {
-    await client.query(
-      `INSERT INTO assessment_template_role_scope (assessment_template_id, role_id, capacity) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-      [templateId, roleIdByCode[roleCode], capacity]
-    );
-  }
-}
-
-// Same underlying criteria for both templates on a process/level — mirrors the
-// reviewed criteria table (Process Knowledge = Self-rated, the rest Supervisor-
-// rated) for the SUPERVISOR template; the SELF template scores every item as SELF
-// since the whole point is the worker rating themselves against the same bar.
-async function seedTemplateContent(templateId, category) {
-  const existingQ = await client.query(`SELECT 1 FROM question_bank WHERE assessment_template_id = $1 LIMIT 1`, [templateId]);
-  if (existingQ.rows[0]) return;
-
-  const questions = [
-    ["What is the correct torque sequence before energizing the control panel?", [["A","Center-out, star pattern"],["B","Left to right"],["C","Any order"],["D","Reverse of assembly order"]], ["A"], "safety"],
-    ["Which PPE is mandatory before opening the slipring housing?", [["A","Safety glasses only"],["B","Insulated gloves + safety glasses"],["C","None, it is de-energized"],["D","Ear protection only"]], ["B"], "safety"],
-    ["A control panel wiring diagram revision mismatch should be resolved by:", [["A","Proceeding and noting it later"],["B","Escalating to the SOP owner before continuing"],["C","Using the older revision"],["D","Skipping that sub-assembly"]], ["B"], "quality"],
-    ["Standard work time for this sub-assembly is exceeded — first action?", [["A","Rush remaining steps"],["B","Flag to supervisor and check for a blocking issue"],["C","Skip the quality check"],["D","Nothing, it is within tolerance"]], ["B"], "productivity"],
-    ["Which of these is a critical safety checkpoint (not just quality)?", [["A","Label orientation"],["B","Cable tie spacing"],["C","Torque on the earthing bolt"],["D","Paint finish"]], ["C"], "safety"],
-  ];
-  for (const [text, opts, correct, tag] of questions) {
-    await client.query(
-      `INSERT INTO question_bank (assessment_template_id, question_text, options_json, correct_answer_json, tags)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [templateId, text, JSON.stringify(opts.map(([k, t]) => ({ key: k, text: t }))), JSON.stringify(correct), [tag]]
-    );
-  }
-
-  const checklist = [
-    ["standard_work", "Process Knowledge — can explain the process steps and parameters unprompted", false, "SELF"],
-    ["safety", "Correct PPE worn throughout", true, "SUPERVISOR_ASSESSOR"],
-    ["quality", "Torque values within spec on all fasteners", false, "SUPERVISOR_ASSESSOR"],
-    ["standard_work", "Sequence followed per SOP without skipped steps", false, "SUPERVISOR_ASSESSOR"],
-    ["productivity", "Completed within standard time", false, "SUPERVISOR_ASSESSOR"],
-  ];
-  let seq = 1;
-  for (const [cat, text, critical, defaultCapacity] of checklist) {
-    const capacity = category === "SELF" ? "SELF" : defaultCapacity;
-    await client.query(
-      `INSERT INTO practical_checklist_item (assessment_template_id, category, criterion_text, is_critical, evaluator_capacity, sequence_no)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [templateId, cat, text, critical, capacity, seq++]
-    );
-  }
-
-  const behaviours = [["ATTENDANCE", "Attendance & Punctuality"], ["COMMUNICATION", "Communication"], ["TEAMWORK", "Teamwork"], ["DISCIPLINE", "Discipline"]];
-  seq = 1;
-  for (const [code, label] of behaviours) {
-    const capacity = category === "SELF" ? "SELF" : "SUPERVISOR_ASSESSOR";
-    await client.query(
-      `INSERT INTO behaviour_criterion (assessment_template_id, criterion_code, criterion_label, evaluator_capacity, sequence_no) VALUES ($1,$2,$3,$4,$5)`,
-      [templateId, code, label, capacity, seq++]
-    );
-  }
-}
+// NOTE: the legacy assessment-authoring seed (assessment_weightage_config +
+// the old assessment_template / question_bank / practical_checklist_item /
+// behaviour_criterion tables) was removed when migration 0013 retired that
+// module. The new-model assessment content is seeded by seed_figma_demo.mjs
+// (assessment_template / assessment / question). This script now only seeds
+// org/process/worker master data plus the still-live learning-path,
+// gap-analysis, retest and certificate-template rows the legacy MVP pages use.
 
 async function main() {
   await client.connect();
@@ -325,57 +262,36 @@ async function main() {
   for (const [key, processId] of Object.entries(demoProcessIds)) {
     if (!processId) continue;
     const l2 = levelIdByCode.L2, l3 = levelIdByCode.L3;
-    const processLabel = key === "nacelle" ? "Nacelle Electrical & Control Panel Assembly" : "Slipring Assembly";
-    const supervisorTemplateIdByLevel = {};
 
     for (const levelId of [l2, l3]) {
-      const levelCode = levelId === l2 ? "L2" : "L3";
-
-      await client.query(
-        `INSERT INTO assessment_weightage_config (process_id, skill_level_id, theory_weight_pct, practical_weight_pct, behaviour_weight_pct, passing_score_pct)
-         VALUES ($1,$2,20,70,10,70) ON CONFLICT (process_id, skill_level_id) DO NOTHING`,
-        [processId, levelId]
-      );
       await client.query(
         `INSERT INTO retest_policy (process_id, skill_level_id, cooling_period_days, max_attempts, escalation_role_code)
          VALUES ($1,$2,7,3,'SUPERVISOR') ON CONFLICT (process_id, skill_level_id) DO NOTHING`,
         [processId, levelId]
       );
-
-      // Two templates per process/level, per the reviewed Assessment Master design:
-      // a certifying SUPERVISOR assessment, and a SELF readiness check the worker can
-      // run beforehand — never itself certifying (enforced in the submit handler).
-      const supervisorTemplateId = await upsertAssessmentTemplate(processId, levelId, `${processLabel} — ${levelCode} Assessment`, "SUPERVISOR", false);
-      const selfTemplateId = await upsertAssessmentTemplate(processId, levelId, `${processLabel} — ${levelCode} Readiness Check (Self)`, "SELF", true);
-      supervisorTemplateIdByLevel[levelCode] = supervisorTemplateId;
-
-      await seedRoleScope(supervisorTemplateId, [["EMPLOYEE", "CAN_TAKE"], ["SUPERVISOR", "CAN_EVALUATE"], ["ASSESSOR", "CAN_EVALUATE"]], roleIdByCode);
-      await seedRoleScope(selfTemplateId, [["EMPLOYEE", "CAN_TAKE"], ["EMPLOYEE", "CAN_EVALUATE"]], roleIdByCode);
-
-      await seedTemplateContent(supervisorTemplateId, "SUPERVISOR");
-      await seedTemplateContent(selfTemplateId, "SELF");
     }
 
-    // requiresAssessment activities link back to the SUPERVISOR template for that
-    // level (a Practical Demonstration is only "complete" once that mini-assessment
-    // is passed, not just evidenced) — min_completion_pct varies per activity type
-    // (e.g. OJT tracked as % of required hours/reps logged, not a binary tick).
+    // min_completion_pct varies per activity type (e.g. OJT tracked as % of
+    // required hours/reps logged, not a binary tick). The legacy per-activity
+    // link to a certifying assessment template went away with migration 0013;
+    // the new model assigns assessments to a process level, not an activity.
+    // requires_assessment is forced false here: the DB CHECK
+    // (ck_requires_assessment_has_template) needs a linked_assessment_template_id
+    // when true, and per-activity assessment links were retired in 0013.
     const activityDefs = [
       ["SOP_READING", "Read & acknowledge the process SOP", 100, false],
       ["OJT", "On-the-job training with a certified L3+ buddy", 80, false],
       ["TOOLBOX_TALK", "Safety toolbox talk for this process", 100, false],
-      ["PRACTICAL_DEMONSTRATION", "Demonstrate the process unsupervised to a Trainer", 100, true],
+      ["PRACTICAL_DEMONSTRATION", "Demonstrate the process unsupervised to a Trainer", 100, false],
     ];
     for (const levelId of [l2, l3]) {
-      const levelCode = levelId === l2 ? "L2" : "L3";
       const activityIdByType = {};
       for (const [type, title, minCompletionPct, requiresAssessment] of activityDefs) {
         const evidenceType = type === "SOP_READING" ? "digital_signoff" : "photo";
-        const linkedTemplateId = requiresAssessment ? supervisorTemplateIdByLevel[levelCode] : null;
         const ares = await client.query(
           `INSERT INTO learning_activity_catalog (process_id, skill_level_id, activity_type, title, evidence_type_required, min_completion_pct, requires_assessment, linked_assessment_template_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING learning_activity_catalog_id`,
-          [processId, levelId, type, title, evidenceType, minCompletionPct, requiresAssessment, linkedTemplateId]
+           VALUES ($1,$2,$3,$4,$5,$6,$7,NULL) RETURNING learning_activity_catalog_id`,
+          [processId, levelId, type, title, evidenceType, minCompletionPct, requiresAssessment]
         );
         activityIdByType[type] = ares.rows[0].learning_activity_catalog_id;
       }
