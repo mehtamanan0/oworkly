@@ -78,6 +78,9 @@ export async function resetWorkerQualificationState(workerId: string) {
     [workerId]
   );
   await pool.query(`DELETE FROM qualification_case WHERE worker_id = $1`, [workerId]);
+  // Sub-level sign-offs (migration 0014) — the finalize gate reads these, so a
+  // test that completes them must not leak into the next test's assumptions.
+  await pool.query(`DELETE FROM worker_process_sub_level_progress WHERE worker_id = $1`, [workerId]);
   // Certifying advances worker_process_enrollment.current_process_level_id
   // for real (that's the entire point of certifying) — reset it back to the
   // seeded E2/target-E3 state so a certify test doesn't leak into the next

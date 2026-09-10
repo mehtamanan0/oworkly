@@ -5,6 +5,11 @@
 import { Router } from "express";
 import { query, queryOne } from "../db.js";
 import { asyncHandler, ApiError } from "../lib/asyncHandler.js";
+import {
+  listCriteria, createCriterion, updateCriterion, deleteCriterion,
+  listSubLevels, createSubLevel, updateSubLevel, deleteSubLevel,
+} from "../application/services/processConfigService.js";
+import { markProgress, listProgress } from "../application/services/subLevelProgressService.js";
 
 export const masterDataV2Router = Router();
 
@@ -109,10 +114,82 @@ masterDataV2Router.get(
       [req.params.id]
     );
     const subLevels = await query<any>(
-      `SELECT psl.* FROM process_sub_level psl JOIN process_level pl ON pl.process_level_id = psl.process_level_id WHERE pl.process_id = $1 ORDER BY psl.sequence`,
+      `SELECT psl.* FROM process_sub_level psl JOIN process_level pl ON pl.process_level_id = psl.process_level_id
+       WHERE pl.process_id = $1 AND psl.is_active ORDER BY psl.sequence`,
       [req.params.id]
     );
-    res.json({ process, levels, subLevels });
+    const criteria = await query<any>(
+      `SELECT plc.* FROM process_level_criterion plc JOIN process_level pl ON pl.process_level_id = plc.process_level_id
+       WHERE pl.process_id = $1 AND plc.is_active ORDER BY plc.category, plc.sequence, plc.created_at`,
+      [req.params.id]
+    );
+    res.json({ process, levels, subLevels, criteria });
+  })
+);
+
+// ---- Level criteria (migration 0014) ----
+masterDataV2Router.get(
+  "/processes/:processId/levels/:levelId/criteria",
+  asyncHandler(async (req, res) => {
+    res.json(await listCriteria(req.params.levelId, req.currentUser!));
+  })
+);
+masterDataV2Router.post(
+  "/processes/:processId/levels/:levelId/criteria",
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await createCriterion(req.params.levelId, req.body, req.currentUser!));
+  })
+);
+masterDataV2Router.patch(
+  "/processes/:processId/levels/:levelId/criteria/:criterionId",
+  asyncHandler(async (req, res) => {
+    res.json(await updateCriterion(req.params.criterionId, req.body, req.currentUser!));
+  })
+);
+masterDataV2Router.delete(
+  "/processes/:processId/levels/:levelId/criteria/:criterionId",
+  asyncHandler(async (req, res) => {
+    res.json(await deleteCriterion(req.params.criterionId, req.currentUser!));
+  })
+);
+
+// ---- Level sub-levels (migration 0014) ----
+masterDataV2Router.get(
+  "/processes/:processId/levels/:levelId/sub-levels",
+  asyncHandler(async (req, res) => {
+    res.json(await listSubLevels(req.params.levelId, req.currentUser!));
+  })
+);
+masterDataV2Router.post(
+  "/processes/:processId/levels/:levelId/sub-levels",
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await createSubLevel(req.params.levelId, req.body, req.currentUser!));
+  })
+);
+masterDataV2Router.patch(
+  "/processes/:processId/levels/:levelId/sub-levels/:subLevelId",
+  asyncHandler(async (req, res) => {
+    res.json(await updateSubLevel(req.params.subLevelId, req.body, req.currentUser!));
+  })
+);
+masterDataV2Router.delete(
+  "/processes/:processId/levels/:levelId/sub-levels/:subLevelId",
+  asyncHandler(async (req, res) => {
+    res.json(await deleteSubLevel(req.params.subLevelId, req.currentUser!));
+  })
+);
+
+// ---- Worker sub-level progress (migration 0014) ----
+masterDataV2Router.get(
+  "/workers/:workerId/sub-level-progress",
+  asyncHandler(async (req, res) => {
+    res.json(await listProgress(req.params.workerId, req.currentUser!));
+  })
+);
+masterDataV2Router.post(
+  "/workers/:workerId/sub-levels/:subLevelId/progress",
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await markProgress(req.params.workerId, req.params.subLevelId, req.body, req.currentUser!));
   })
 );
 

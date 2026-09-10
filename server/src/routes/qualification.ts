@@ -177,7 +177,12 @@ qualificationRouter.get(
        WHERE ca.assessment_attempt_id = $1 ORDER BY apc.sequence_no`,
       [req.params.id]
     );
-    const attempt = await queryOne<any>(`SELECT * FROM assessment_attempt WHERE assessment_attempt_id = $1`, [req.params.id]);
+    const attempt = await queryOne<any>(
+      `SELECT aa.*, qc.process_id, qc.target_process_level_id
+       FROM assessment_attempt aa JOIN qualification_case qc ON qc.qualification_case_id = aa.qualification_case_id
+       WHERE aa.assessment_attempt_id = $1`,
+      [req.params.id]
+    );
     if (!attempt) throw new ApiError(404, "Attempt not found");
     res.json({ ...attempt, componentAttempts });
   })

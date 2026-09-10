@@ -170,6 +170,19 @@ async function main() {
   step("Evaluate: Behavioural component (rating)");
   await scoreAll(componentByType["BEHAVIOURAL"].assessment_attempt_section_id, "BRA Behavioural Rating");
 
+  step("Sub-level gate: sign off E3's mandatory sub-levels");
+  const e3SubLevels = await api("GET", `/v2/processes/${braProcessId}/levels/${e3.process_level_id}/sub-levels`, { token: supervisorToken, expectStatus: 200 });
+  const mandatorySubLevels = (e3SubLevels.body ?? []).filter((s) => s.is_mandatory);
+  assert(mandatorySubLevels.length > 0, "E3 must have mandatory sub-levels seeded");
+  for (const sl of mandatorySubLevels) {
+    await api("POST", `/v2/workers/${rajesh.worker_id}/sub-levels/${sl.process_sub_level_id}/progress`, {
+      token: supervisorToken,
+      body: { status: "completed" },
+      expectStatus: 201,
+    });
+  }
+  ok("mandatory sub-levels signed off", { count: mandatorySubLevels.length, codes: mandatorySubLevels.map((s) => s.code) });
+
   step("Finalize attempt -> expect qualification result PASS");
   const finalizeRes = await api("POST", `/v2/assessment-attempts/${attemptId}/finalize`, {
     token: supervisorToken,

@@ -104,16 +104,61 @@ async function upsertPackage({ processLevelId, components }) {
         `INSERT INTO assessment_template (company_id, process_level_id, version) VALUES ($1,$2,1) RETURNING assessment_template_id`,
         [CWE, processLevelId]
       )).rows[0].assessment_template_id;
-  await client.query(`DELETE FROM assessment_template_assessment WHERE assessment_template_id = $1`, [packageId]);
+  // Upsert each link row rather than DELETE-all + re-INSERT: once a worker has
+  // taken an assessment, assessment_attempt_section rows reference these link
+  // rows, so a blind delete would violate the FK — and this seed runs on every
+  // Render boot. Prune only the link rows no longer in the list AND not yet
+  // referenced by any attempt.
   let seq = 1;
+  const keptIds = [];
   for (const c of components) {
-    await client.query(
+    const row = await client.query(
       `INSERT INTO assessment_template_assessment (assessment_template_id, assessment_id, sequence_no, weight_pct, min_gate_pct, is_mandatory, self_assessment_enabled)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (assessment_template_id, assessment_id) DO UPDATE SET
+         sequence_no = EXCLUDED.sequence_no, weight_pct = EXCLUDED.weight_pct, min_gate_pct = EXCLUDED.min_gate_pct,
+         is_mandatory = EXCLUDED.is_mandatory, self_assessment_enabled = EXCLUDED.self_assessment_enabled
+       RETURNING assessment_template_assessment_id`,
       [packageId, c.definitionId, seq++, c.weightPct, c.gatePct ?? null, c.mandatory ?? true, c.selfAssess ?? false]
     );
+    keptIds.push(row.rows[0].assessment_template_assessment_id);
   }
+  await client.query(
+    `DELETE FROM assessment_template_assessment ata
+     WHERE ata.assessment_template_id = $1
+       AND ata.assessment_template_assessment_id <> ALL($2::uuid[])
+       AND NOT EXISTS (SELECT 1 FROM assessment_attempt_section s WHERE s.assessment_template_assessment_id = ata.assessment_template_assessment_id)`,
+    [packageId, keptIds]
+  );
   return packageId;
+}
+
+async function upsertSubLevel({ processLevelId, code, name, description, sequence, weightPct = 0, minScorePct = null, mandatory = true, requiredCriteria = null }) {
+  const res = await client.query(
+    `INSERT INTO process_sub_level (company_id, process_level_id, code, name, description, sequence, required_criteria, min_score_pct, weight_pct, is_mandatory)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     ON CONFLICT (process_level_id, code) DO UPDATE SET
+       name = EXCLUDED.name, description = EXCLUDED.description, sequence = EXCLUDED.sequence,
+       required_criteria = EXCLUDED.required_criteria, min_score_pct = EXCLUDED.min_score_pct,
+       weight_pct = EXCLUDED.weight_pct, is_mandatory = EXCLUDED.is_mandatory, is_active = TRUE
+     RETURNING process_sub_level_id`,
+    [CWE, processLevelId, code, name, description ?? null, sequence, requiredCriteria, minScorePct, weightPct, mandatory]
+  );
+  return res.rows[0].process_sub_level_id;
+}
+
+async function upsertCriterion({ processLevelId, category, text, sequence = 1 }) {
+  const existing = await client.query(
+    `SELECT process_level_criterion_id FROM process_level_criterion WHERE process_level_id = $1 AND category = $2 AND text = $3`,
+    [processLevelId, category, text]
+  );
+  if (existing.rows[0]) return existing.rows[0].process_level_criterion_id;
+  const res = await client.query(
+    `INSERT INTO process_level_criterion (company_id, process_level_id, category, text, sequence)
+     VALUES ($1,$2,$3,$4,$5) RETURNING process_level_criterion_id`,
+    [CWE, processLevelId, category, text, sequence]
+  );
+  return res.rows[0].process_level_criterion_id;
 }
 
 async function upsertUser({ email, username, displayName, workerId = null }) {
@@ -288,6 +333,35 @@ async function main() {
     ],
   });
   console.log("BRA assessment library + E2/E3 package links seeded");
+
+  // ---- Sub-levels + categorised criteria for BRA E2 & E3 (migration 0014,
+  //      matches screenshot 19's "3 sub-levels" per level) ----
+  await upsertSubLevel({ processLevelId: braLevels.E2, code: "E2-SL1", name: "Torque tooling proficiency", description: "Selects, verifies and applies calibrated torque tools to spec", sequence: 1, weightPct: 40, minScorePct: 70, mandatory: true, requiredCriteria: "Demonstrate a bolted joint to spec, unaided, within standard time" });
+  await upsertSubLevel({ processLevelId: braLevels.E2, code: "E2-SL2", name: "Bond-gap measurement", description: "Measures and records bond-gap within drawing tolerance", sequence: 2, weightPct: 30, minScorePct: 70, mandatory: true });
+  await upsertSubLevel({ processLevelId: braLevels.E2, code: "E2-SL3", name: "Traveller-card discipline", description: "Completes traveller cards and tag-out records with no omissions", sequence: 3, weightPct: 30, minScorePct: 80, mandatory: true });
+
+  await upsertSubLevel({ processLevelId: braLevels.E3, code: "E3-SL1", name: "Independent BRA build", description: "Builds a full blade-root sub-assembly independently with zero rework", sequence: 1, weightPct: 40, minScorePct: 75, mandatory: true, requiredCriteria: "One full sub-assembly signed off with no rework flag" });
+  await upsertSubLevel({ processLevelId: braLevels.E3, code: "E3-SL2", name: "Deviation handling & NCR", description: "Identifies a non-conformance, tags out, and raises a correct NCR", sequence: 2, weightPct: 35, minScorePct: 75, mandatory: true });
+  await upsertSubLevel({ processLevelId: braLevels.E3, code: "E3-SL3", name: "Junior guidance", description: "Coaches a junior through a torque sequence without prompting", sequence: 3, weightPct: 25, minScorePct: null, mandatory: false });
+
+  for (const [levelId, rows] of [
+    [braLevels.E2, [
+      ["KNOWLEDGE", "Names all BRA fastener classes and their torque specs"],
+      ["PRACTICAL", "Completes a bolted joint to spec unaided within standard time"],
+      ["BEHAVIOUR", "Consistently follows tag-out and traveller-card procedure"],
+      ["EXPERIENCE", "At least 3 months on the BRA line"],
+    ]],
+    [braLevels.E3, [
+      ["KNOWLEDGE", "Explains NCR routing and quality disposition for BRA defects"],
+      ["PRACTICAL", "Builds a full BRA sub-assembly independently with zero rework"],
+      ["BEHAVIOUR", "Coaches a junior through a torque sequence without prompting"],
+      ["EXPERIENCE", "At least 9 months on the BRA line, 2 of them as E2"],
+    ]],
+  ]) {
+    let seq = 1;
+    for (const [category, text] of rows) await upsertCriterion({ processLevelId: levelId, category, text, sequence: seq++ });
+  }
+  console.log("BRA E2/E3 sub-levels + criteria seeded");
 
   // ---- Role scope: who can take / evaluate the E3 package ----
   const roleIds = Object.fromEntries((await client.query(`SELECT role_id, role_code FROM role`)).rows.map((r) => [r.role_code, r.role_id]));

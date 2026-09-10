@@ -22,6 +22,7 @@ DELETE FROM assessment_attempt WHERE qualification_case_id IN (
   SELECT qualification_case_id FROM qualification_case WHERE worker_id = 'c5c1a50f-ae61-438b-8568-7030ace12c08'
 );
 DELETE FROM qualification_case WHERE worker_id = 'c5c1a50f-ae61-438b-8568-7030ace12c08';
+DELETE FROM worker_process_sub_level_progress WHERE worker_id = 'c5c1a50f-ae61-438b-8568-7030ace12c08';
 DELETE FROM idempotency_key WHERE idempotency_key LIKE 'demo-%';
 COMMIT;
 EOF

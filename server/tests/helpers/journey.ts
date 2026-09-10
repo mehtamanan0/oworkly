@@ -24,6 +24,21 @@ export async function startAttempt(token: string, qualificationCaseId: string, i
   return res.body;
 }
 
+// Sub-level gate (migration 0014): every mandatory sub-level of the target
+// level must be signed off complete before finalizeAttempt will produce a
+// result. The Supervisor/Trainer token does the sign-off.
+export async function completeMandatorySubLevels(token: string, processId: string, levelId: string, workerId: string) {
+  const res = await agent.get(`/api/v1/v2/processes/${processId}/levels/${levelId}/sub-levels`).set("Authorization", `Bearer ${token}`);
+  if (res.status !== 200) throw new Error(`list sub-levels failed: ${res.status} ${JSON.stringify(res.body)}`);
+  for (const sl of res.body.filter((s: any) => s.is_mandatory)) {
+    const r = await agent
+      .post(`/api/v1/v2/workers/${workerId}/sub-levels/${sl.process_sub_level_id}/progress`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ status: "completed" });
+    if (![200, 201].includes(r.status)) throw new Error(`mark sub-level ${sl.code} failed: ${r.status} ${JSON.stringify(r.body)}`);
+  }
+}
+
 export async function scoreComponentFullMarks(token: string, componentAttemptId: string, idemSuffix: string) {
   const itemsRes = await agent.get(`/api/v1/v2/assessment-attempt-sections/${componentAttemptId}/items`).set("Authorization", `Bearer ${token}`);
   const responses = itemsRes.body.map((it: any) => ({ questionId: it.question_id, score: it.max_score, responseJson: { chosen: "full_credit" } }));
@@ -61,6 +76,8 @@ export async function runSupervisorJourney(fixtures: Fixtures, idemSuffix: strin
   for (const c of nonSelfComponents) {
     await scoreComponentFullMarks(supervisor.accessToken, c.assessment_attempt_section_id, `${idemSuffix}-${c.assessment_attempt_section_id}`);
   }
+
+  await completeMandatorySubLevels(supervisor.accessToken, fixtures.braProcessId, fixtures.levelIdByCode.E3, fixtures.rajeshWorkerId);
 
   const finalize = await agent
     .post(`/api/v1/v2/assessment-attempts/${attempt.assessment_attempt_id}/finalize`)

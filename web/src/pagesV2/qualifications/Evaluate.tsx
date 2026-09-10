@@ -5,7 +5,7 @@ import { AppShell } from "../../shell/AppShell";
 import { ProgressRail } from "../../components/figma/ProgressRail";
 import { RatingRow, RatingGridHeader } from "../../components/figma/RatingGrid";
 import { Button } from "../../components/figma/Button";
-import { qual, idempotencyKey } from "../../lib/apiV2";
+import { qual, v2, idempotencyKey } from "../../lib/apiV2";
 
 interface ComponentAttempt {
   assessment_attempt_section_id: string;
@@ -19,7 +19,20 @@ interface ComponentAttempt {
 }
 interface AttemptDetail {
   qualification_case_id: string;
+  worker_id: string;
+  process_id: string;
+  target_process_level_id: string;
   componentAttempts: ComponentAttempt[];
+}
+interface SubLevel {
+  process_sub_level_id: string;
+  code: string;
+  name: string;
+  is_mandatory: boolean;
+}
+interface SubLevelProgress {
+  process_sub_level_id: string;
+  status: string;
 }
 interface Item {
   question_id: string;
@@ -47,6 +60,27 @@ export function Evaluate() {
     queryKey: ["items", current?.assessment_attempt_section_id],
     queryFn: () => qual.get<Item[]>(`/assessment-attempt-sections/${current!.assessment_attempt_section_id}/items`),
     enabled: !!current,
+  });
+
+  const { data: subLevels } = useQuery({
+    queryKey: ["sub-levels", attempt?.process_id, attempt?.target_process_level_id],
+    queryFn: () => v2.get<SubLevel[]>(`/processes/${attempt!.process_id}/levels/${attempt!.target_process_level_id}/sub-levels`),
+    enabled: !!attempt?.process_id && !!attempt?.target_process_level_id,
+  });
+  const { data: subLevelProgress } = useQuery({
+    queryKey: ["sub-level-progress", attempt?.worker_id],
+    queryFn: () => v2.get<SubLevelProgress[]>(`/workers/${attempt!.worker_id}/sub-level-progress`),
+    enabled: !!attempt?.worker_id,
+  });
+
+  const mandatorySubLevels = (subLevels ?? []).filter((s) => s.is_mandatory);
+  const progressById = new Map((subLevelProgress ?? []).map((p) => [p.process_sub_level_id, p.status]));
+  const subLevelsReady = mandatorySubLevels.every((s) => progressById.get(s.process_sub_level_id) === "completed");
+
+  const markSubLevel = useMutation({
+    mutationFn: (subLevelId: string) =>
+      v2.post(`/workers/${attempt!.worker_id}/sub-levels/${subLevelId}/progress`, { status: "completed" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sub-level-progress", attempt?.worker_id] }),
   });
 
   const submitComponent = useMutation({
@@ -97,6 +131,40 @@ export function Evaluate() {
       </div>
 
       <ProgressRail steps={mandatorySteps.map((s) => s.name)} currentIndex={componentIndex} />
+
+      {mandatorySubLevels.length > 0 && (
+        <div className={`my-4 rounded-fig-card border p-3 text-xs ${subLevelsReady ? "border-fig-green/40 bg-green-50" : "border-fig-orange/40 bg-orange-50"}`}>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-semibold uppercase tracking-wide text-fig-text">Sub-level readiness</span>
+            <span className={subLevelsReady ? "font-semibold text-fig-green" : "font-semibold text-fig-orange"}>
+              {mandatorySubLevels.filter((s) => progressById.get(s.process_sub_level_id) === "completed").length}/{mandatorySubLevels.length} complete
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {mandatorySubLevels.map((s) => {
+              const done = progressById.get(s.process_sub_level_id) === "completed";
+              return (
+                <div key={s.process_sub_level_id} className="flex items-center justify-between">
+                  <span className={done ? "text-fig-text" : "text-fig-muted"}>
+                    {done ? "✓ " : "○ "}
+                    <span className="font-medium">{s.code}</span> · {s.name}
+                  </span>
+                  {!done && (
+                    <button
+                      onClick={() => markSubLevel.mutate(s.process_sub_level_id)}
+                      disabled={markSubLevel.isPending}
+                      className="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-fig-blue ring-1 ring-fig-border hover:bg-fig-bg"
+                    >
+                      Mark complete
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {!subLevelsReady && <div className="mt-2 text-fig-orange">All mandatory sub-levels must be signed off before the result can be finalized.</div>}
+        </div>
+      )}
 
       <div className="my-4 rounded-fig-card border border-blue-200 bg-blue-50 p-3 text-xs text-fig-text">
         <div className="flex flex-wrap gap-x-8 gap-y-1">
@@ -157,7 +225,10 @@ export function Evaluate() {
         <button onClick={() => navigate(-1)} className="text-sm text-fig-muted hover:text-fig-blue">
           ← Back
         </button>
-        <Button disabled={!allAnswered || submitting} onClick={() => submitComponent.mutate()}>
+        <Button
+          disabled={!allAnswered || submitting || (componentIndex + 1 >= mandatorySteps.length && !subLevelsReady)}
+          onClick={() => submitComponent.mutate()}
+        >
           {submitting ? "Submitting…" : componentIndex + 1 < mandatorySteps.length ? "Next: " + mandatorySteps[componentIndex + 1].name + " →" : "Submit & See Result →"}
         </Button>
       </div>

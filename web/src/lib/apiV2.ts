@@ -81,6 +81,8 @@ export const workerPortalApi = {
 export const v2 = {
   get: <T>(path: string) => request<T>(V2_BASE, path),
   post: <T>(path: string, body?: unknown, idempotencyKey?: string) => request<T>(V2_BASE, path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined, idempotencyKey }),
+  patch: <T>(path: string, body?: unknown) => request<T>(V2_BASE, path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
+  del: <T>(path: string) => request<T>(V2_BASE, path, { method: "DELETE" }),
 };
 
 export const qual = {

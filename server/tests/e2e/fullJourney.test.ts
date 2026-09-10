@@ -78,6 +78,19 @@ describe("full E2E journey: Rajesh Kumar BRA E2 -> E3", () => {
       expect(scoreRes.body.weightedPct).toBe(100);
     }
 
+    // ---- Sub-level gate: sign off the target level's mandatory sub-levels ----
+    const subLevelsRes = await agent.get(`/api/v1/v2/processes/${braEnrollment.process_id}/levels/${e3.process_level_id}/sub-levels`).set("Authorization", `Bearer ${supervisor.accessToken}`);
+    expect(subLevelsRes.status).toBe(200);
+    const mandatorySubLevels = subLevelsRes.body.filter((s: any) => s.is_mandatory);
+    expect(mandatorySubLevels.length).toBeGreaterThan(0);
+    for (const sl of mandatorySubLevels) {
+      const prog = await agent
+        .post(`/api/v1/v2/workers/${rajesh.worker_id}/sub-levels/${sl.process_sub_level_id}/progress`)
+        .set("Authorization", `Bearer ${supervisor.accessToken}`)
+        .send({ status: "completed" });
+      expect([200, 201]).toContain(prog.status);
+    }
+
     // ---- Finalize -> PASS ----
     const finalizeRes = await agent
       .post(`/api/v1/v2/assessment-attempts/${attemptId}/finalize`)

@@ -26,6 +26,16 @@ interface Certificate {
   valid_to: string | null;
   issued_at: string;
 }
+interface SubLevelProgressRow {
+  worker_process_sub_level_progress_id: string;
+  sub_level_code: string;
+  sub_level_name: string;
+  status: string;
+  percent_complete: number;
+  is_mandatory: boolean;
+  completed_at: string | null;
+  signed_off_by_name: string | null;
+}
 interface WorkerProfile {
   worker_id: string;
   hrms_employee_code: string;
@@ -51,6 +61,11 @@ export function SkillProfile() {
   const initialTab = (location.state as { openTab?: Tab } | null)?.openTab ?? "profile";
   const [tab, setTab] = useState<Tab>(initialTab);
   const { data: profile } = useQuery({ queryKey: ["worker-profile", workerId], queryFn: () => v2.get<WorkerProfile>(`/workers/${workerId}/profile`) });
+  const { data: subLevelProgress } = useQuery({
+    queryKey: ["worker-sub-level-progress", workerId],
+    queryFn: () => v2.get<SubLevelProgressRow[]>(`/workers/${workerId}/sub-level-progress`),
+    enabled: !!workerId,
+  });
 
   const primaryCert = useMemo(() => profile?.certificates.find((c) => c.status === "active") ?? profile?.certificates[0], [profile]);
 
@@ -145,6 +160,29 @@ export function SkillProfile() {
                 </button>
               ))}
             </SectionCard>
+
+            {subLevelProgress && subLevelProgress.length > 0 && (
+              <SectionCard title="Sub-level Progress" padded={false}>
+                {subLevelProgress.map((s) => (
+                  <div key={s.worker_process_sub_level_progress_id} className="flex items-center justify-between border-b border-fig-border px-5 py-3 last:border-b-0">
+                    <div>
+                      <div className="text-sm font-medium text-fig-text">
+                        <span className="font-semibold">{s.sub_level_code}</span> · {s.sub_level_name}
+                        {!s.is_mandatory && <span className="ml-2 rounded bg-fig-bg px-1.5 py-0.5 text-[10px] font-medium text-fig-muted">optional</span>}
+                      </div>
+                      {s.signed_off_by_name && <div className="text-xs text-fig-muted">Signed off by {s.signed_off_by_name}</div>}
+                    </div>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                        s.status === "completed" ? "bg-green-50 text-fig-green" : s.status === "in_progress" ? "bg-orange-50 text-fig-orange" : "bg-fig-bg text-fig-muted"
+                      }`}
+                    >
+                      {s.status === "completed" ? "✓ Complete" : s.status === "in_progress" ? `${s.percent_complete}%` : "Not started"}
+                    </span>
+                  </div>
+                ))}
+              </SectionCard>
+            )}
           </div>
         </div>
       )}

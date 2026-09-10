@@ -9,6 +9,7 @@ import { recordAudit } from "../../infrastructure/database/audit.js";
 import { assertEvaluatorCapacity } from "../../middleware/authorization/index.js";
 import type { CurrentUser } from "../../middleware/authentication/jwt.js";
 import { initiateApproval } from "./approvalService.js";
+import { mandatorySubLevelStatus } from "./subLevelProgressService.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   DRAFT: ["READY_FOR_ASSESSMENT", "NOT_ELIGIBLE", "CANCELLED"],
@@ -366,6 +367,19 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
     const processLevel = await client.query(`SELECT min_qualification_score_pct FROM process_level WHERE process_level_id = $1`, [qcase.rows[0].target_process_level_id]);
     const passThreshold = Number(processLevel.rows[0].min_qualification_score_pct ?? 70);
 
+    // Sub-level gate (migration 0014): every mandatory sub-level of the target
+    // level must be signed off complete for this worker before the attempt can
+    // be finalized. Mirrors the mandatory-components gate above — a hard stop,
+    // then recorded as an ALL_MANDATORY_SUB_LEVELS_COMPLETE rule check below.
+    // A level with no mandatory sub-levels configured is unaffected.
+    const subLevelStatus = await mandatorySubLevelStatus(client, attempt.rows[0].worker_id, qcase.rows[0].target_process_level_id);
+    if (subLevelStatus.incomplete.length > 0) {
+      throw new ApiError(
+        422,
+        `All mandatory sub-levels for the target level must be completed before finalizing (missing: ${subLevelStatus.incomplete.map((s) => s.code).join(", ")})`
+      );
+    }
+
     let weightedTotal = 0;
     let forcedFail = false;
     const componentResults: { componentAttemptId: string; rawPct: number; weightPct: number; weightedPct: number; gatePct: number | null; gatePassed: boolean | null; status: "PASS" | "FAIL" }[] = [];
@@ -400,10 +414,12 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
     await client.query(
       `INSERT INTO qualification_rule_check (qualification_result_id, rule_code, label, passed, detail_json) VALUES
        ($1,'WEIGHTED_SCORE_MIN',$2,$3,$4),
-       ($1,'ALL_MANDATORY_COMPONENTS_COMPLETE',$5,$6,$7)`,
+       ($1,'ALL_MANDATORY_COMPONENTS_COMPLETE',$5,$6,$7),
+       ($1,'ALL_MANDATORY_SUB_LEVELS_COMPLETE',$8,$9,$10)`,
       [
         qr.rows[0].qualification_result_id, `Weighted Score ≥ ${passThreshold}%`, weightedTotal >= passThreshold, JSON.stringify({ weightedTotal, passThreshold }),
         "All Assessments Completed", mandatoryScored.length === mandatoryTotal.length, JSON.stringify({ completed: mandatoryScored.length, total: mandatoryTotal.length }),
+        "All Mandatory Sub-levels Completed", subLevelStatus.incomplete.length === 0, JSON.stringify({ completed: subLevelStatus.completed, total: subLevelStatus.total }),
       ]
     );
 
