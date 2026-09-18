@@ -51,33 +51,31 @@ masterDataV2Router.get(
   "/companies/:id/hierarchy",
   asyncHandler(async (req, res) => {
     const companyId = scopedCompanyId(req, req.params.id) ?? req.params.id;
-    const levelTypes = await query<any>(`SELECT * FROM org_level_type WHERE company_id = $1 ORDER BY sequence`, [companyId]);
+    const includeInactive = req.query.includeInactive === "1" || req.query.includeInactive === "true";
+    const levelTypes = await query<any>(
+      `SELECT * FROM org_level_type WHERE company_id = $1 ${includeInactive ? "" : "AND is_active"} ORDER BY sequence`,
+      [companyId]
+    );
     const units = await query<any>(
+      // org_unit_head_assignment is a history table (migration 0017) -- the
+      // LEFT JOIN takes only the current (effective_to IS NULL) row, so a
+      // unit with prior heads doesn't fan out into duplicate rows here.
       `SELECT ou.*, olt.code AS level_type_code, olt.name AS level_type_name, olt.sequence AS level_sequence,
               oha.worker_id AS head_worker_id, w.first_name AS head_first_name, w.last_name AS head_last_name
        FROM org_unit ou
        JOIN org_level_type olt ON olt.org_level_type_id = ou.org_level_type_id
-       LEFT JOIN org_unit_head_assignment oha ON oha.org_unit_id = ou.org_unit_id
+       LEFT JOIN org_unit_head_assignment oha ON oha.org_unit_id = ou.org_unit_id AND oha.effective_to IS NULL
        LEFT JOIN worker w ON w.worker_id = oha.worker_id
-       WHERE ou.company_id = $1 AND ou.is_active ORDER BY olt.sequence, ou.name`,
+       WHERE ou.company_id = $1 ${includeInactive ? "" : "AND ou.is_active"} ORDER BY olt.sequence, ou.name`,
       [companyId]
     );
     res.json({ levelTypes, units });
   })
 );
 
-masterDataV2Router.post(
-  "/org-units/:id/head",
-  asyncHandler(async (req, res) => {
-    const { workerId } = req.body;
-    await query(
-      `INSERT INTO org_unit_head_assignment (org_unit_id, worker_id, assigned_by_user_id) VALUES ($1,$2,$3)
-       ON CONFLICT (org_unit_id) DO UPDATE SET worker_id = EXCLUDED.worker_id, assigned_at = now(), assigned_by_user_id = EXCLUDED.assigned_by_user_id`,
-      [req.params.id, workerId, req.currentUser?.userId ?? null]
-    );
-    res.json({ status: "assigned" });
-  })
-);
+// POST /org-units/:id/head (a single unaudited, non-company-scoped, unwired
+// row overwrite) removed in M6 — replaced by the history-aware
+// /org-units/:id/head-assignments endpoints in routes/admin/orgHierarchy.ts.
 
 masterDataV2Router.get(
   "/processes",
