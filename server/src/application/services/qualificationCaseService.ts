@@ -419,6 +419,45 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
       );
     }
 
+    // Level-progression rules (migration 0018): a small, data-driven rule
+    // engine rather than one-off code per rule. CUSTOM rules are never
+    // evaluated (enforced at creation: they can only be ADVISORY, migration
+    // 0018's CHECK) so they're excluded here rather than silently "passing".
+    const progressionRules = await client.query(
+      `SELECT * FROM process_level_progression_rule WHERE process_level_id = $1 AND is_active AND rule_type <> 'CUSTOM'`,
+      [qcase.rows[0].target_process_level_id]
+    );
+    const evaluatedRules: { label: string; passed: boolean; detail: unknown; severity: string }[] = [];
+    for (const rule of progressionRules.rows) {
+      const params = rule.params_json ?? {};
+      let passed = false;
+      let detail: unknown = {};
+      if (rule.rule_type === "MIN_TENURE_MONTHS") {
+        const worker = await client.query(`SELECT date_of_joining FROM worker WHERE worker_id = $1`, [attempt.rows[0].worker_id]);
+        const doj = worker.rows[0]?.date_of_joining;
+        const months = Number(params.months);
+        const tenureMonths = doj ? (Date.now() - new Date(doj).getTime()) / (1000 * 60 * 60 * 24 * 30.44) : null;
+        passed = tenureMonths != null && tenureMonths >= months;
+        detail = { requiredMonths: months, dateOfJoining: doj, tenureMonths: tenureMonths != null ? Math.round(tenureMonths * 10) / 10 : null };
+      } else if (rule.rule_type === "REQUIRED_PRIOR_LEVEL") {
+        const required = await client.query(`SELECT ordinal FROM process_level WHERE process_level_id = $1`, [params.requiredProcessLevelId]);
+        const enrollment = await client.query(
+          `SELECT pl.ordinal FROM worker_process_enrollment wpe JOIN process_level pl ON pl.process_level_id = wpe.current_process_level_id
+           WHERE wpe.worker_id = $1 AND wpe.process_id = $2`,
+          [attempt.rows[0].worker_id, qcase.rows[0].process_id]
+        );
+        const requiredOrdinal = required.rows[0]?.ordinal;
+        const currentOrdinal = enrollment.rows[0]?.ordinal;
+        passed = requiredOrdinal != null && currentOrdinal != null && currentOrdinal >= requiredOrdinal;
+        detail = { requiredProcessLevelId: params.requiredProcessLevelId, requiredOrdinal, currentOrdinal };
+      }
+      evaluatedRules.push({ label: rule.label, passed, detail, severity: rule.severity });
+    }
+    const failedBlocking = evaluatedRules.filter((r) => !r.passed && r.severity === "BLOCKING");
+    if (failedBlocking.length > 0) {
+      throw new ApiError(422, `Level progression rule(s) not met: ${failedBlocking.map((r) => r.label).join("; ")}`);
+    }
+
     let weightedTotal = 0;
     let forcedFail = false;
     const componentResults: { componentAttemptId: string; rawPct: number; weightPct: number; weightedPct: number; gatePct: number | null; gatePassed: boolean | null; status: "PASS" | "FAIL" }[] = [];
@@ -467,6 +506,12 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
         "All Mandatory Sub-levels Completed", subLevelStatus.incomplete.length === 0, JSON.stringify({ completed: subLevelStatus.completed, total: subLevelStatus.total }),
       ]
     );
+    for (const rule of evaluatedRules) {
+      await client.query(
+        `INSERT INTO qualification_rule_check (qualification_result_id, rule_code, label, passed, detail_json) VALUES ($1,'PROGRESSION_RULE',$2,$3,$4)`,
+        [qr.rows[0].qualification_result_id, rule.label, rule.passed, JSON.stringify(rule.detail)]
+      );
+    }
 
     if (result === "PASS") {
       await transitionCase(client, qcase.rows[0].qualification_case_id, "PENDING_APPROVAL", currentUser.userId);
