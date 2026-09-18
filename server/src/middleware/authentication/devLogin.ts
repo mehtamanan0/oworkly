@@ -41,6 +41,18 @@ devLoginRouter.post(
     const distinctCompanies = [...new Set(roleRows.map((r) => r.company_id))];
     const companyId = distinctCompanies.length === 1 ? distinctCompanies[0] : null;
 
+    // A deactivated/archived tenant blocks new logins for its own users (a
+    // platform admin, companyId === null, isn't scoped to one company and
+    // must still be able to sign in to manage it). Already-issued tokens are
+    // short-lived (JWT_ACCESS_TTL_SECONDS) and simply expire on their own —
+    // no per-request DB check is added to `authenticate` for this.
+    if (companyId) {
+      const company = await queryOne<{ status: string }>(`SELECT status FROM company WHERE company_id = $1`, [companyId]);
+      if (company && ["SUSPENDED", "ARCHIVED"].includes(company.status)) {
+        throw new ApiError(403, `This company's account is ${company.status.toLowerCase()} — contact your platform administrator`);
+      }
+    }
+
     const currentUser = {
       userId: user.user_id,
       companyId,

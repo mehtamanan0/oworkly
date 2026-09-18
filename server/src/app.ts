@@ -27,6 +27,7 @@ import { qualificationRouter } from "./routes/qualification.js";
 import { masterDataV2Router } from "./routes/masterDataV2.js";
 import { workerPortalRouter } from "./routes/workerPortal.js";
 import { mediaRouter, mediaLocalRouter } from "./routes/media.js";
+import { companiesAdminRouter } from "./routes/admin/companies.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGINS }));
@@ -101,6 +102,7 @@ v1.use("/recommended-activities", recommendedActivitiesRouter);
 v1.use("/v2", authenticate, masterDataV2Router);
 v1.use("/v2", authenticate, qualificationRouter);
 v1.use("/v2", authenticate, mediaRouter);
+v1.use("/v2", authenticate, companiesAdminRouter);
 
 app.use("/api/v1", v1);
 

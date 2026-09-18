@@ -14,6 +14,20 @@ export function requireRole(...roles: string[]) {
   };
 }
 
+// Platform-wide actions (create a company, activate/deactivate a tenant,
+// manage cross-company configuration) require the ADMIN role AND no single-
+// company scope — i.e. exactly the existing "platform admin" shape
+// (companyId === null on the JWT), never a new role_code. A company's own
+// ADMIN is deliberately refused here even though they hold the same role
+// name — being scoped to one company is what disqualifies them.
+export function requirePlatformAdmin(req: Request, _res: Response, next: NextFunction) {
+  if (!req.currentUser) return next(new ApiError(401, "Not authenticated"));
+  if (req.currentUser.companyId !== null || !req.currentUser.roles.includes("ADMIN")) {
+    return next(new ApiError(403, "Requires a platform administrator (ADMIN role, not scoped to a single company)"));
+  }
+  next();
+}
+
 // A platform admin (companyId === null) may act on any company. Anyone else
 // must be scoped to the exact company the resource belongs to. The company_id
 // to check against a specific resource is resolved per-route (params, body,

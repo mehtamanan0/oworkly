@@ -11,6 +11,13 @@ import {
 } from "../application/services/processConfigService.js";
 import { markProgress, listProgress } from "../application/services/subLevelProgressService.js";
 import * as cfg from "../application/services/assessmentConfigService.js";
+import { requireRole } from "../middleware/authorization/index.js";
+
+// Assessment/question authoring — content and answer keys, gated to the
+// authoring roles. (Previously ungated: any authenticated caller, including
+// an EMPLOYEE-role worker token, could hit GET /assessments/:id/items and
+// read correct_answer_json/explanation directly — closed here.)
+const requireAuthoringRole = requireRole("ADMIN", "LND_TEAM");
 
 export const masterDataV2Router = Router();
 
@@ -137,18 +144,21 @@ masterDataV2Router.get(
 );
 masterDataV2Router.post(
   "/processes/:processId/levels/:levelId/criteria",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.status(201).json(await createCriterion(req.params.levelId, req.body, req.currentUser!));
   })
 );
 masterDataV2Router.patch(
   "/processes/:processId/levels/:levelId/criteria/:criterionId",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.json(await updateCriterion(req.params.criterionId, req.body, req.currentUser!));
   })
 );
 masterDataV2Router.delete(
   "/processes/:processId/levels/:levelId/criteria/:criterionId",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.json(await deleteCriterion(req.params.criterionId, req.currentUser!));
   })
@@ -163,18 +173,21 @@ masterDataV2Router.get(
 );
 masterDataV2Router.post(
   "/processes/:processId/levels/:levelId/sub-levels",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.status(201).json(await createSubLevel(req.params.levelId, req.body, req.currentUser!));
   })
 );
 masterDataV2Router.patch(
   "/processes/:processId/levels/:levelId/sub-levels/:subLevelId",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.json(await updateSubLevel(req.params.subLevelId, req.body, req.currentUser!));
   })
 );
 masterDataV2Router.delete(
   "/processes/:processId/levels/:levelId/sub-levels/:subLevelId",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     res.json(await deleteSubLevel(req.params.subLevelId, req.currentUser!));
   })
@@ -220,45 +233,45 @@ masterDataV2Router.get(
 );
 
 // ---- M4: assessment authoring (library + templates + questions) ----
-masterDataV2Router.post("/assessments", asyncHandler(async (req, res) => {
+masterDataV2Router.post("/assessments", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.status(201).json(await cfg.createAssessment(req.body, req.currentUser!));
 }));
-masterDataV2Router.patch("/assessments/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.patch("/assessments/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.updateAssessment(req.params.id, req.body, req.currentUser!));
 }));
-masterDataV2Router.delete("/assessments/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.delete("/assessments/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.deleteAssessment(req.params.id, req.currentUser!));
 }));
 
-masterDataV2Router.post("/assessments/:id/questions", asyncHandler(async (req, res) => {
+masterDataV2Router.post("/assessments/:id/questions", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.status(201).json(await cfg.addQuestion(req.params.id, req.body, req.currentUser!));
 }));
-masterDataV2Router.patch("/assessments/:id/questions/reorder", asyncHandler(async (req, res) => {
+masterDataV2Router.patch("/assessments/:id/questions/reorder", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.reorderQuestions(req.params.id, req.body?.orderedIds, req.currentUser!));
 }));
-masterDataV2Router.patch("/questions/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.patch("/questions/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.updateQuestion(req.params.id, req.body, req.currentUser!));
 }));
-masterDataV2Router.delete("/questions/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.delete("/questions/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.deleteQuestion(req.params.id, req.currentUser!));
 }));
 
-masterDataV2Router.post("/assessment-templates", asyncHandler(async (req, res) => {
+masterDataV2Router.post("/assessment-templates", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.status(201).json(await cfg.createTemplate(String(req.body?.processLevelId ?? ""), req.currentUser!));
 }));
-masterDataV2Router.delete("/assessment-templates/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.delete("/assessment-templates/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.deleteTemplate(req.params.id, req.currentUser!));
 }));
-masterDataV2Router.post("/assessment-templates/:id/activate", asyncHandler(async (req, res) => {
+masterDataV2Router.post("/assessment-templates/:id/activate", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.activateTemplate(req.params.id, req.currentUser!));
 }));
-masterDataV2Router.post("/assessment-templates/:id/assessments", asyncHandler(async (req, res) => {
+masterDataV2Router.post("/assessment-templates/:id/assessments", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.status(201).json(await cfg.addTemplateAssessment(req.params.id, req.body, req.currentUser!));
 }));
-masterDataV2Router.patch("/assessment-template-assessments/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.patch("/assessment-template-assessments/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.updateTemplateAssessment(req.params.id, req.body, req.currentUser!));
 }));
-masterDataV2Router.delete("/assessment-template-assessments/:id", asyncHandler(async (req, res) => {
+masterDataV2Router.delete("/assessment-template-assessments/:id", requireAuthoringRole, asyncHandler(async (req, res) => {
   res.json(await cfg.removeTemplateAssessment(req.params.id, req.currentUser!));
 }));
 
@@ -281,6 +294,7 @@ masterDataV2Router.get(
 
 masterDataV2Router.get(
   "/assessments/:id/items",
+  requireAuthoringRole,
   asyncHandler(async (req, res) => {
     const items = await query<any>(`SELECT * FROM question WHERE assessment_id = $1 ORDER BY sequence_no`, [req.params.id]);
     res.json(items);
