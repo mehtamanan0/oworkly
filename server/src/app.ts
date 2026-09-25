@@ -31,6 +31,7 @@ import { companiesAdminRouter } from "./routes/admin/companies.js";
 import { orgHierarchyAdminRouter } from "./routes/admin/orgHierarchy.js";
 import { processAdminRouter } from "./routes/admin/processes.js";
 import { productAdminRouter } from "./routes/admin/products.js";
+import { selfAssessmentPolicyRouter } from "./routes/admin/selfAssessmentPolicies.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGINS }));
@@ -109,6 +110,7 @@ v1.use("/v2", authenticate, companiesAdminRouter);
 v1.use("/v2", authenticate, orgHierarchyAdminRouter);
 v1.use("/v2", authenticate, processAdminRouter);
 v1.use("/v2", authenticate, productAdminRouter);
+v1.use("/v2", authenticate, selfAssessmentPolicyRouter);
 
 app.use("/api/v1", v1);
 

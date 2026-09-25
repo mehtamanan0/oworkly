@@ -237,6 +237,24 @@ qualificationRouter.post(
 );
 
 qualificationRouter.get(
+  "/assessment-attempts/:id/self-assessment-result",
+  asyncHandler(async (req, res) => {
+    const user = currentUserOrThrow(req);
+    const result = await qualificationCaseService.getSelfAssessmentResult(req.params.id, user);
+    res.json(result);
+  })
+);
+
+qualificationRouter.post(
+  "/assessment-attempts/:id/self-assessment-review",
+  asyncHandler(async (req, res) => {
+    const user = currentUserOrThrow(req);
+    const result = await qualificationCaseService.reviewSelfAssessment(req.params.id, user, req.body?.outcomeNote);
+    res.json(result);
+  })
+);
+
+qualificationRouter.get(
   "/qualification-cases/:id/approval",
   asyncHandler(async (req, res) => {
     const status = await approvalService.getApprovalStatus(req.params.id);

@@ -10,6 +10,7 @@ import { assertEvaluatorCapacity } from "../../middleware/authorization/index.js
 import type { CurrentUser } from "../../middleware/authentication/jwt.js";
 import { initiateApproval } from "./approvalService.js";
 import { mandatorySubLevelStatus } from "./subLevelProgressService.js";
+import { resolvePolicy } from "./selfAssessmentPolicyService.js";
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   DRAFT: ["READY_FOR_ASSESSMENT", "NOT_ELIGIBLE", "CANCELLED"],
@@ -329,11 +330,12 @@ export async function checkItem(componentAttemptId: string, questionId: string, 
     const objective = computeObjectiveScore(item, responseJson);
     if (!objective) throw new ApiError(422, "This item type has no single correct answer to check — score it via the component score endpoint instead");
 
-    const processIdRow = await client.query(
-      `SELECT qc.process_id FROM qualification_case qc WHERE qc.qualification_case_id = (SELECT qualification_case_id FROM assessment_attempt WHERE assessment_attempt_id = $1)`,
+    const caseRow = await client.query(
+      `SELECT qc.process_id, qc.company_id, qc.target_process_level_id
+       FROM qualification_case qc WHERE qc.qualification_case_id = (SELECT qualification_case_id FROM assessment_attempt WHERE assessment_attempt_id = $1)`,
       [row.assessment_attempt_id]
     );
-    await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, processIdRow.rows[0]?.process_id, row.assessment_template_id);
+    await assertEvaluatorCapacity(currentUser, item.evaluator_capacity, row.worker_id, caseRow.rows[0]?.process_id, row.assessment_template_id);
 
     await client.query(
       `INSERT INTO question_response (assessment_attempt_section_id, question_id, response_json, raw_score, max_score, is_correct, evaluator_capacity, evaluator_user_id)
@@ -343,7 +345,25 @@ export async function checkItem(componentAttemptId: string, questionId: string, 
       [componentAttemptId, questionId, JSON.stringify(responseJson), objective.scoreNum, item.max_score, objective.isCorrect, item.evaluator_capacity, currentUser.userId]
     );
     await client.query("COMMIT");
-    return { isCorrect: objective.isCorrect, correctAnswerKeys: item.correct_answer_json, explanation: item.explanation, maxScore: item.max_score };
+
+    // M9: previously this always returned the answer key and explanation to
+    // whoever called it — including the worker self-checking their own quiz
+    // answer. Gate those two fields by the company's visibility policy only
+    // when the caller IS the worker being scored; a staff member grading a
+    // live-administered assessment still needs to see the key to grade it.
+    let correctAnswerKeys: unknown = item.correct_answer_json;
+    let explanation: unknown = item.explanation;
+    const isSelfCaller = !!currentUser.workerId && currentUser.workerId === row.worker_id;
+    if (isSelfCaller) {
+      const policy = await resolvePolicy(caseRow.rows[0]?.company_id, {
+        assessmentTemplateId: row.assessment_template_id,
+        processLevelId: caseRow.rows[0]?.target_process_level_id,
+        processId: caseRow.rows[0]?.process_id,
+      });
+      if (!policy.showCorrectAnswersToWorker) correctAnswerKeys = undefined;
+      if (!policy.showFeedbackToWorker) explanation = undefined;
+    }
+    return { isCorrect: objective.isCorrect, correctAnswerKeys, explanation, maxScore: item.max_score };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -383,15 +403,45 @@ export async function finalizeAttempt(attemptId: string, currentUser: CurrentUse
       // never touches qualification_case.status, never issues a certificate.
       const selfComponent = componentAttempts.rows.find((c) => c.status === "scored" && c.self_assessment_enabled);
       const passed = selfComponent ? Number(selfComponent.weighted_pct ?? 0) >= Number(selfComponent.min_gate_pct ?? 0) * (100 / 100) : false;
+      const compositePct = selfComponent ? Number(selfComponent.weighted_pct) : 0;
       await client.query(`UPDATE assessment_attempt SET status = 'scored', submitted_at = now() WHERE assessment_attempt_id = $1`, [attemptId]);
       await client.query(
-        `INSERT INTO self_assessment_review (assessment_attempt_id, outcome_note) VALUES ($1,$2)
+        `INSERT INTO self_assessment_review (assessment_attempt_id, outcome_note, passed, composite_pct) VALUES ($1,$2,$3,$4)
          ON CONFLICT (assessment_attempt_id) DO NOTHING`,
-        [attemptId, passed ? "Passed readiness check" : "Not passed — review required"]
+        [attemptId, passed ? "Passed readiness check" : "Not passed — review required", passed, compositePct]
       );
       await recordAudit(client, { entityName: "assessment_attempt", entityId: attemptId, action: "STATUS_CHANGE", actorUserId: currentUser.userId, after: { selfAssessmentOnly: true, passed } });
       await client.query("COMMIT");
-      return { selfAssessmentOnly: true, passed, compositePct: selfComponent ? Number(selfComponent.weighted_pct) : 0 };
+
+      // M9: release the worker's own result according to the resolved
+      // visibility policy — a staff caller (unusual, but the route is
+      // shared) always sees the real outcome.
+      const caseInfo = await queryOne<any>(
+        `SELECT qc.company_id, qc.process_id, qc.target_process_level_id, qc.assessment_template_id
+         FROM qualification_case qc WHERE qc.qualification_case_id = $1`,
+        [attempt.rows[0].qualification_case_id]
+      );
+      const isSelfCaller = !!currentUser.workerId && currentUser.workerId === attempt.rows[0].worker_id;
+      if (!isSelfCaller || !caseInfo) {
+        return { selfAssessmentOnly: true, released: true, passed, compositePct };
+      }
+      const policy = await resolvePolicy(caseInfo.company_id, {
+        processId: caseInfo.process_id,
+        processLevelId: caseInfo.target_process_level_id,
+        assessmentTemplateId: caseInfo.assessment_template_id,
+      });
+      if (policy.releasePolicy !== "ON_SUBMISSION") {
+        return {
+          selfAssessmentOnly: true,
+          released: false,
+          releasePolicy: policy.releasePolicy,
+          message:
+            policy.releasePolicy === "NEVER"
+              ? "Results for this self-assessment are not shared with workers."
+              : "Your result will be available after your supervisor reviews it.",
+        };
+      }
+      return { selfAssessmentOnly: true, released: true, passed, compositePct: policy.showScoreToWorker ? compositePct : undefined };
     }
 
     // A real (non-self-assessment) attempt DOES require every mandatory
@@ -536,4 +586,72 @@ export async function listBlockersForAttemptStart(qualificationCaseId: string) {
   // this pass) — returns an empty blocker list today since createOrGetCase's
   // enrollment check is the only real gate implemented.
   return { eligible: true, blockers: [] as { reason: string; detail?: unknown }[] };
+}
+
+// M9: worker-facing "view my self-assessment result" and the
+// supervisor/trainer/admin-facing review of the same outcome — both consult
+// the same resolvePolicy() used by checkItem/finalizeAttempt above.
+export async function getSelfAssessmentResult(attemptId: string, currentUser: CurrentUser) {
+  const row = await queryOne<any>(
+    `SELECT aa.assessment_attempt_id, aa.worker_id,
+            qc.company_id, qc.process_id, qc.target_process_level_id, qc.assessment_template_id,
+            sar.passed, sar.composite_pct, sar.reviewed_by_user_id, sar.reviewed_at, sar.outcome_note
+     FROM assessment_attempt aa
+     JOIN qualification_case qc ON qc.qualification_case_id = aa.qualification_case_id
+     LEFT JOIN self_assessment_review sar ON sar.assessment_attempt_id = aa.assessment_attempt_id
+     WHERE aa.assessment_attempt_id = $1`,
+    [attemptId]
+  );
+  if (!row) throw new ApiError(404, "Self-assessment attempt not found");
+  if (currentUser.companyId && currentUser.companyId !== row.company_id) throw new ApiError(403, "Cross-company access is not permitted");
+  if (row.passed === null) throw new ApiError(422, "This attempt has not been finalized as a self-assessment yet");
+
+  const isSelfCaller = !!currentUser.workerId && currentUser.workerId === row.worker_id;
+  const isStaff = currentUser.roles.some((r) => ["ADMIN", "LND_TEAM", "SUPERVISOR", "TRAINER"].includes(r));
+  if (!isSelfCaller && !isStaff) throw new ApiError(403, "Not authorized to view this self-assessment result");
+
+  const policy = await resolvePolicy(row.company_id, {
+    processId: row.process_id,
+    processLevelId: row.target_process_level_id,
+    assessmentTemplateId: row.assessment_template_id,
+  });
+
+  if (isSelfCaller) {
+    if (policy.releasePolicy === "NEVER") return { released: false, reason: "Results for this self-assessment are not shared with workers." };
+    if (policy.releasePolicy === "AFTER_SUPERVISOR_REVIEW" && !row.reviewed_at) {
+      return { released: false, reason: "Your result will be available after your supervisor reviews it." };
+    }
+    return { released: true, passed: row.passed, compositePct: policy.showScoreToWorker ? Number(row.composite_pct) : undefined, reviewedAt: row.reviewed_at };
+  }
+
+  // Staff (supervisor/trainer/admin/L&D): gated by the corresponding
+  // answers_visible_to_* flag, independent of the worker's own release policy.
+  const roleAllowed =
+    ((currentUser.roles.includes("ADMIN") || currentUser.roles.includes("LND_TEAM")) && policy.answersVisibleToAdmin) ||
+    (currentUser.roles.includes("TRAINER") && policy.answersVisibleToTrainer) ||
+    (currentUser.roles.includes("SUPERVISOR") && policy.answersVisibleToSupervisor);
+  if (!roleAllowed) throw new ApiError(403, "This self-assessment policy does not permit your role to view results");
+  return { released: true, passed: row.passed, compositePct: Number(row.composite_pct), reviewedAt: row.reviewed_at, outcomeNote: row.outcome_note };
+}
+
+export async function reviewSelfAssessment(attemptId: string, currentUser: CurrentUser, outcomeNote?: string) {
+  if (!currentUser.roles.some((r) => ["ADMIN", "LND_TEAM", "SUPERVISOR", "TRAINER"].includes(r))) {
+    throw new ApiError(403, "Only a Supervisor, Trainer, L&D or Admin can review a self-assessment");
+  }
+  const row = await queryOne<any>(
+    `SELECT aa.assessment_attempt_id, qc.company_id
+     FROM assessment_attempt aa JOIN qualification_case qc ON qc.qualification_case_id = aa.qualification_case_id
+     WHERE aa.assessment_attempt_id = $1`,
+    [attemptId]
+  );
+  if (!row) throw new ApiError(404, "Self-assessment attempt not found");
+  if (currentUser.companyId && currentUser.companyId !== row.company_id) throw new ApiError(403, "Cross-company access is not permitted");
+  const updated = await queryOne<any>(
+    `UPDATE self_assessment_review SET reviewed_by_user_id = $1, reviewed_at = now(), outcome_note = COALESCE($2, outcome_note)
+     WHERE assessment_attempt_id = $3 RETURNING *`,
+    [currentUser.userId, outcomeNote ?? null, attemptId]
+  );
+  if (!updated) throw new ApiError(422, "This attempt has no self-assessment review row yet — finalize it first");
+  await recordAudit(pool, { entityName: "self_assessment_review", entityId: updated.self_assessment_review_id, action: "UPDATE", actorUserId: currentUser.userId, after: updated });
+  return updated;
 }

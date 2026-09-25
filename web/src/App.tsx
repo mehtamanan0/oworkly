@@ -71,6 +71,7 @@ export default function App() {
       <Route path="/admin/assessments/level-links" element={<ProtectedRoute><AssessmentConfig tab="level-links" /></ProtectedRoute>} />
       <Route path="/admin/assessments/question-bank" element={<ProtectedRoute><AssessmentConfig tab="question-bank" /></ProtectedRoute>} />
       <Route path="/admin/assessments/question-bank/:definitionId" element={<ProtectedRoute><AssessmentConfig tab="question-bank" /></ProtectedRoute>} />
+      <Route path="/admin/assessments/visibility-policy" element={<ProtectedRoute><AssessmentConfig tab="visibility-policy" /></ProtectedRoute>} />
       <Route path="/admin/skill-matrix-config" element={<ProtectedRoute><SkillMatrixConfig /></ProtectedRoute>} />
       <Route path="/admin/product-master" element={<ProtectedRoute><ProductMaster /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />

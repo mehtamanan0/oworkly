@@ -7,6 +7,7 @@ import { SectionCard } from "../../components/figma/SectionCard";
 import { Button } from "../../components/figma/Button";
 import { Modal, ModalActions, Field, inputClass } from "../../components/figma/Modal";
 import { v2 } from "../../lib/apiV2";
+import { useAuthV2 } from "../../lib/AuthV2Context";
 
 interface Definition {
   assessment_id: string;
@@ -71,7 +72,7 @@ const qDescription = (t: string, maxScore: string | number) =>
   : ["VIDEO", "AUDIO", "IMAGE"].includes(t) ? `${qLabel(t).replace(/^\S+\s/, "")} capture · assessor-graded, max ${maxScore} marks`
   : `Max ${maxScore} marks`;
 
-export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "question-bank" }) {
+export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "question-bank" | "visibility-policy" }) {
   const navigate = useNavigate();
   const params = useParams();
   const { data: definitions } = useQuery({ queryKey: ["assessments"], queryFn: () => v2.get<Definition[]>("/assessments") });
@@ -79,9 +80,9 @@ export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "qu
 
   return (
     <AppShell breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Assessment Configuration" }]}>
-      <PageHeader title="Assessment Configuration" description="Manage assessment templates, MCQ question banks, and level links" />
+      <PageHeader title="Assessment Configuration" description="Manage assessment templates, MCQ question banks, level links, and self-assessment visibility" />
       <div className="mb-5 flex gap-1 border-b border-fig-border text-sm font-medium">
-        {([["library", "📖 Assessment Library"], ["level-links", "🔗 Level Assessment Links"], ["question-bank", "☰ Question Bank"]] as const).map(([key, label]) => (
+        {([["library", "📖 Assessment Library"], ["level-links", "🔗 Level Assessment Links"], ["question-bank", "☰ Question Bank"], ["visibility-policy", "🔒 Visibility Policy"]] as const).map(([key, label]) => (
           <button key={key} onClick={() => navigate(`/admin/assessments/${key}`)}
             className={`-mb-px border-b-2 px-3 py-2 ${tab === key ? "border-fig-blue text-fig-blue" : "border-transparent text-fig-muted hover:text-fig-text"}`}>
             {label}
@@ -91,6 +92,7 @@ export function AssessmentConfig({ tab }: { tab: "library" | "level-links" | "qu
       {tab === "library" && <LibraryTab definitions={definitions} />}
       {tab === "level-links" && <LevelLinksTab processes={processes} definitions={definitions} />}
       {tab === "question-bank" && <QuestionBankTab definitions={definitions} initialId={params.definitionId} />}
+      {tab === "visibility-policy" && <VisibilityPolicyTab processes={processes} />}
     </AppShell>
   );
 }
@@ -448,5 +450,294 @@ function QuestionModal({ assessmentId, value, onClose, onSaved }: { assessmentId
       </div>
       {save.isError && <div className="mt-2 text-xs text-fig-red">{(save.error as Error).message}</div>}
     </Modal>
+  );
+}
+
+// ===========================================================================
+// M9: self-assessment visibility policy
+// ===========================================================================
+interface Company { company_id: string; code: string; name: string }
+interface Policy {
+  self_assessment_visibility_policy_id: string;
+  process_id: string | null;
+  process_level_id: string | null;
+  assessment_template_id: string | null;
+  name: string;
+  answers_visible_to_worker: boolean;
+  answers_visible_to_supervisor: boolean;
+  answers_visible_to_trainer: boolean;
+  answers_visible_to_admin: boolean;
+  show_correct_answers_to_worker: boolean;
+  show_score_to_worker: boolean;
+  show_feedback_to_worker: boolean;
+  release_policy: "ON_SUBMISSION" | "AFTER_SUPERVISOR_REVIEW" | "NEVER";
+  is_active: boolean;
+  process_name: string | null;
+  process_level_name: string | null;
+}
+interface ResolvedPolicy {
+  policyId: string | null;
+  name: string;
+  answersVisibleToWorker: boolean;
+  answersVisibleToSupervisor: boolean;
+  answersVisibleToTrainer: boolean;
+  answersVisibleToAdmin: boolean;
+  showCorrectAnswersToWorker: boolean;
+  showScoreToWorker: boolean;
+  showFeedbackToWorker: boolean;
+  releasePolicy: "ON_SUBMISSION" | "AFTER_SUPERVISOR_REVIEW" | "NEVER";
+  isDefault: boolean;
+}
+
+const RELEASE_POLICY_LABEL: Record<string, string> = {
+  ON_SUBMISSION: "Immediately, on submission",
+  AFTER_SUPERVISOR_REVIEW: "Only after a Supervisor reviews it",
+  NEVER: "Never shown to the worker",
+};
+
+function scopeLabel(p: Pick<Policy, "process_id" | "process_level_id" | "process_name" | "process_level_name">) {
+  if (p.process_level_id) return `Level: ${p.process_level_name ?? p.process_level_id}`;
+  if (p.process_id) return `Process: ${p.process_name ?? p.process_id}`;
+  return "Company default";
+}
+
+function VisibilityPolicyTab({ processes }: { processes?: ProcessRow[] }) {
+  const { user } = useAuthV2();
+  const qc = useQueryClient();
+  const canEdit = user?.roles?.includes("ADMIN") || user?.roles?.includes("LND_TEAM");
+  const { data: companies } = useQuery({ queryKey: ["companies"], queryFn: () => v2.get<Company[]>("/companies") });
+  const company = companies?.find((c) => c.company_id === user?.companyId) ?? companies?.[0];
+
+  const policiesKey = ["self-assessment-policies", company?.company_id];
+  const { data: policies } = useQuery({
+    queryKey: policiesKey,
+    queryFn: () => v2.get<Policy[]>(`/companies/${company!.company_id}/self-assessment-policies?includeInactive=1`),
+    enabled: !!company,
+  });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: policiesKey });
+    qc.invalidateQueries({ queryKey: ["resolve-policy"] });
+  };
+
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Policy | null>(null);
+
+  const archive = useMutation({ mutationFn: (id: string) => v2.post(`/self-assessment-policies/${id}/archive`), onSuccess: invalidate, onError: (e) => window.alert((e as Error).message) });
+  const restore = useMutation({ mutationFn: (id: string) => v2.post(`/self-assessment-policies/${id}/restore`), onSuccess: invalidate, onError: (e) => window.alert((e as Error).message) });
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Self-Assessment Visibility Policies"
+        action={canEdit ? <Button onClick={() => setCreating(true)}>+ New Policy</Button> : <span className="text-xs text-fig-muted">Only Admin / L&amp;D can edit visibility policies</span>}
+        padded={false}
+      >
+        {(policies ?? []).length === 0 && (
+          <div className="px-5 py-4 text-sm text-fig-muted">
+            No policy configured yet — the locked-down system default applies: correct answers and feedback are hidden from workers, scores are shown, and results release immediately on submission.
+          </div>
+        )}
+        {policies?.map((p) => (
+          <div key={p.self_assessment_visibility_policy_id} className={`flex items-center justify-between border-b border-fig-border px-5 py-3.5 last:border-b-0 ${!p.is_active ? "opacity-50" : ""}`}>
+            <div>
+              <div className="text-sm font-medium text-fig-text">
+                {p.name}
+                {!p.is_active && <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-fig-red">Archived</span>}
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-fig-muted">
+                <span className="rounded bg-blue-50 px-1.5 py-0.5 font-medium text-fig-blue">{scopeLabel(p)}</span>
+                <span>{p.show_correct_answers_to_worker ? "✓ answers shown" : "✕ answers hidden"}</span>
+                <span>· {p.show_feedback_to_worker ? "✓ feedback shown" : "✕ feedback hidden"}</span>
+                <span>· release: {RELEASE_POLICY_LABEL[p.release_policy]}</span>
+              </div>
+            </div>
+            {canEdit && (
+              <div className="flex shrink-0 gap-2">
+                <button onClick={() => setEditing(p)} className="rounded bg-fig-bg px-2.5 py-1 text-xs font-medium text-fig-text">Edit</button>
+                {p.is_active ? (
+                  <button onClick={() => archive.mutate(p.self_assessment_visibility_policy_id)} className="rounded px-2.5 py-1 text-xs font-medium text-fig-red hover:bg-red-50">Archive</button>
+                ) : (
+                  <button onClick={() => restore.mutate(p.self_assessment_visibility_policy_id)} className="rounded bg-blue-50 px-2.5 py-1 text-xs font-medium text-fig-blue">Restore</button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </SectionCard>
+
+      {company && <RolePreviewPanel companyId={company.company_id} processes={processes} />}
+
+      {creating && company && (
+        <PolicyModal companyId={company.company_id} processes={processes} value={null} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); invalidate(); }} />
+      )}
+      {editing && company && (
+        <PolicyModal companyId={company.company_id} processes={processes} value={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); invalidate(); }} />
+      )}
+    </div>
+  );
+}
+
+function PolicyModal({ companyId, processes, value, onClose, onSaved }: { companyId: string; processes?: ProcessRow[]; value: Policy | null; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(value?.name ?? "");
+  const [scope, setScope] = useState<"COMPANY" | "PROCESS" | "LEVEL">(value?.process_level_id ? "LEVEL" : value?.process_id ? "PROCESS" : "COMPANY");
+  const [processId, setProcessId] = useState(value?.process_id ?? processes?.[0]?.process_id ?? "");
+  const [levelId, setLevelId] = useState(value?.process_level_id ?? "");
+  const { data: levelsData } = useQuery({
+    queryKey: ["process-levels", processId],
+    queryFn: () => v2.get<{ levels: { process_level_id: string; code: string; name: string }[] }>(`/processes/${processId}/levels`),
+    enabled: scope === "LEVEL" && !!processId,
+  });
+  const [answersVisibleToWorker, setAnswersVisibleToWorker] = useState(value?.answers_visible_to_worker ?? false);
+  const [answersVisibleToSupervisor, setAnswersVisibleToSupervisor] = useState(value?.answers_visible_to_supervisor ?? true);
+  const [answersVisibleToTrainer, setAnswersVisibleToTrainer] = useState(value?.answers_visible_to_trainer ?? true);
+  const [answersVisibleToAdmin, setAnswersVisibleToAdmin] = useState(value?.answers_visible_to_admin ?? true);
+  const [showCorrectAnswersToWorker, setShowCorrectAnswersToWorker] = useState(value?.show_correct_answers_to_worker ?? false);
+  const [showScoreToWorker, setShowScoreToWorker] = useState(value?.show_score_to_worker ?? true);
+  const [showFeedbackToWorker, setShowFeedbackToWorker] = useState(value?.show_feedback_to_worker ?? false);
+  const [releasePolicy, setReleasePolicy] = useState(value?.release_policy ?? "ON_SUBMISSION");
+
+  const body = {
+    name: name.trim(),
+    processId: scope === "PROCESS" ? processId : undefined,
+    processLevelId: scope === "LEVEL" ? levelId : undefined,
+    answersVisibleToWorker, answersVisibleToSupervisor, answersVisibleToTrainer, answersVisibleToAdmin,
+    showCorrectAnswersToWorker, showScoreToWorker, showFeedbackToWorker, releasePolicy,
+  };
+  const save = useMutation({
+    mutationFn: () => (value ? v2.patch(`/self-assessment-policies/${value.self_assessment_visibility_policy_id}`, body) : v2.post(`/companies/${companyId}/self-assessment-policies`, body)),
+    onSuccess: onSaved,
+  });
+
+  return (
+    <Modal open wide title={value ? "Edit visibility policy" : "New visibility policy"} onClose={onClose}
+      footer={<ModalActions onCancel={onClose} onSave={() => save.mutate()} saving={save.isPending} disabled={!name.trim() || (scope === "LEVEL" && !levelId)} saveLabel={value ? "Save" : "Create"} />}>
+      <Field label="Name"><input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BRA self-assessment defaults" /></Field>
+
+      {!value && (
+        <Field label="Scope">
+          <div className="flex gap-1.5">
+            {(["COMPANY", "PROCESS", "LEVEL"] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setScope(s)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${scope === s ? "border-fig-blue bg-blue-50 text-fig-blue" : "border-fig-border text-fig-muted"}`}>
+                {s === "COMPANY" ? "Company default" : s === "PROCESS" ? "One process" : "One process level"}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+      {!value && scope !== "COMPANY" && (
+        <Field label="Process">
+          <select className={inputClass} value={processId} onChange={(e) => { setProcessId(e.target.value); setLevelId(""); }}>
+            {processes?.map((p) => <option key={p.process_id} value={p.process_id}>{p.name} ({p.code})</option>)}
+          </select>
+        </Field>
+      )}
+      {!value && scope === "LEVEL" && (
+        <Field label="Level">
+          <select className={inputClass} value={levelId} onChange={(e) => setLevelId(e.target.value)}>
+            <option value="">Select a level…</option>
+            {levelsData?.levels.map((l) => <option key={l.process_level_id} value={l.process_level_id}>{l.code} — {l.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      <div className="my-3 border-t border-fig-border pt-3">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-fig-muted">What the worker sees about their own result</div>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={showCorrectAnswersToWorker} onChange={(e) => setShowCorrectAnswersToWorker(e.target.checked)} /> Show the correct answer key</label>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={showFeedbackToWorker} onChange={(e) => setShowFeedbackToWorker(e.target.checked)} /> Show the explanation/feedback text</label>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={showScoreToWorker} onChange={(e) => setShowScoreToWorker(e.target.checked)} /> Show the numeric score</label>
+        <Field label="When the result releases to the worker">
+          <select className={inputClass} value={releasePolicy} onChange={(e) => setReleasePolicy(e.target.value as typeof releasePolicy)}>
+            {Object.entries(RELEASE_POLICY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <div className="border-t border-fig-border pt-3">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-fig-muted">Who else can view a worker's self-assessment result</div>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={answersVisibleToWorker} onChange={(e) => setAnswersVisibleToWorker(e.target.checked)} /> Worker (re-viewing after release)</label>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={answersVisibleToSupervisor} onChange={(e) => setAnswersVisibleToSupervisor(e.target.checked)} /> Supervisor</label>
+        <label className="mb-1.5 flex items-center gap-2 text-sm"><input type="checkbox" checked={answersVisibleToTrainer} onChange={(e) => setAnswersVisibleToTrainer(e.target.checked)} /> Trainer</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={answersVisibleToAdmin} onChange={(e) => setAnswersVisibleToAdmin(e.target.checked)} /> Admin / L&amp;D</label>
+      </div>
+      {save.isError && <div className="mt-2 text-xs text-fig-red">{(save.error as Error).message}</div>}
+    </Modal>
+  );
+}
+
+const ROLES = ["worker", "supervisor", "trainer", "admin"] as const;
+type PreviewRole = (typeof ROLES)[number];
+
+function RolePreviewPanel({ companyId, processes }: { companyId: string; processes?: ProcessRow[] }) {
+  const [processId, setProcessId] = useState("");
+  const [levelId, setLevelId] = useState("");
+  const [role, setRole] = useState<PreviewRole>("worker");
+  const { data: levelsData } = useQuery({
+    queryKey: ["process-levels", processId],
+    queryFn: () => v2.get<{ levels: { process_level_id: string; code: string; name: string }[] }>(`/processes/${processId}/levels`),
+    enabled: !!processId,
+  });
+  const { data: resolved } = useQuery({
+    queryKey: ["resolve-policy", companyId, processId, levelId],
+    queryFn: () => v2.get<ResolvedPolicy>(`/companies/${companyId}/self-assessment-policies/resolve?${new URLSearchParams({ ...(processId ? { processId } : {}), ...(levelId ? { processLevelId: levelId } : {}) })}`),
+  });
+
+  return (
+    <SectionCard title="Preview — what would this role see?">
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-fig-muted">Process (optional)</label>
+          <select className={inputClass} value={processId} onChange={(e) => { setProcessId(e.target.value); setLevelId(""); }}>
+            <option value="">Company default</option>
+            {processes?.map((p) => <option key={p.process_id} value={p.process_id}>{p.name} ({p.code})</option>)}
+          </select>
+        </div>
+        {processId && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fig-muted">Level (optional)</label>
+            <select className={inputClass} value={levelId} onChange={(e) => setLevelId(e.target.value)}>
+              <option value="">Whole process</option>
+              {levelsData?.levels.map((l) => <option key={l.process_level_id} value={l.process_level_id}>{l.code} — {l.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className="mb-1 block text-xs font-medium text-fig-muted">Preview as</label>
+          <div className="flex gap-1">
+            {ROLES.map((r) => (
+              <button key={r} type="button" onClick={() => setRole(r)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium capitalize ${role === r ? "border-fig-blue bg-blue-50 text-fig-blue" : "border-fig-border text-fig-muted"}`}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {resolved && (
+        <div className="rounded-lg border border-fig-border bg-fig-bg p-4 text-sm">
+          <div className="mb-2 text-xs font-medium text-fig-muted">
+            Resolved from: <span className="font-semibold text-fig-text">{resolved.isDefault ? "system default (no policy configured)" : resolved.name}</span>
+          </div>
+          {role === "worker" ? (
+            <ul className="space-y-1">
+              <li>{resolved.showCorrectAnswersToWorker ? "✓" : "✕"} Sees the correct answer key</li>
+              <li>{resolved.showFeedbackToWorker ? "✓" : "✕"} Sees the explanation / feedback</li>
+              <li>{resolved.showScoreToWorker ? "✓" : "✕"} Sees the numeric score</li>
+              <li>📅 Result releases: {RELEASE_POLICY_LABEL[resolved.releasePolicy]}</li>
+            </ul>
+          ) : (
+            <ul className="space-y-1">
+              <li>
+                {role === "supervisor" && (resolved.answersVisibleToSupervisor ? "✓" : "✕")}
+                {role === "trainer" && (resolved.answersVisibleToTrainer ? "✓" : "✕")}
+                {role === "admin" && (resolved.answersVisibleToAdmin ? "✓" : "✕")}
+                {" "}Can view this worker's self-assessment result and score
+              </li>
+            </ul>
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }
