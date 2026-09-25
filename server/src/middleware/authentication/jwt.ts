@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import { config } from "../../config/index.js";
 import { ApiError } from "../../lib/asyncHandler.js";
+import { validateSession } from "../../application/services/sessionService.js";
 
 export interface CurrentUser {
   userId: string;
@@ -14,6 +15,10 @@ export interface CurrentUser {
   roles: string[];
   workerId: string | null;
   displayName: string;
+  // Present only for tokens minted by POST /auth/login (M10) -- absent for
+  // dev-login and worker-portal tokens, which therefore skip the revocable-
+  // session check in authenticate() below entirely (unchanged behaviour).
+  sessionId?: string | null;
 }
 
 declare global {
@@ -28,13 +33,13 @@ declare global {
 
 export function signAccessToken(user: CurrentUser): string {
   return jwt.sign(
-    { sub: user.userId, companyId: user.companyId, roles: user.roles, workerId: user.workerId, name: user.displayName },
+    { sub: user.userId, companyId: user.companyId, roles: user.roles, workerId: user.workerId, name: user.displayName, sid: user.sessionId ?? undefined },
     config.JWT_SECRET,
     { issuer: config.JWT_ISSUER, audience: config.JWT_AUDIENCE, expiresIn: config.JWT_ACCESS_TTL_SECONDS }
   );
 }
 
-export function authenticate(req: Request, _res: Response, next: NextFunction) {
+export async function authenticate(req: Request, _res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
     return next(new ApiError(401, "Missing bearer token"));
@@ -42,12 +47,18 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const token = header.slice("Bearer ".length);
   try {
     const payload = jwt.verify(token, config.JWT_SECRET, { issuer: config.JWT_ISSUER, audience: config.JWT_AUDIENCE }) as jwt.JwtPayload;
+    const sessionId = (payload.sid as string) ?? null;
+    if (sessionId) {
+      const stillValid = await validateSession(sessionId);
+      if (!stillValid) return next(new ApiError(401, "Session has been revoked or has expired"));
+    }
     req.currentUser = {
       userId: String(payload.sub),
       companyId: (payload.companyId as string) ?? null,
       roles: (payload.roles as string[]) ?? [],
       workerId: (payload.workerId as string) ?? null,
       displayName: (payload.name as string) ?? "",
+      sessionId,
     };
     next();
   } catch {

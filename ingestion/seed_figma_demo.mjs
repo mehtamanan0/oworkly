@@ -10,9 +10,20 @@
 // enforcement" rule.
 import { randomBytes, scryptSync } from "node:crypto";
 import pg from "pg";
+import argon2 from "argon2";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://oworkly:oworkly_dev_pw@localhost:5433/oworkly_lms";
 const client = new pg.Client({ connectionString: DATABASE_URL });
+
+// M10: every seeded demo staff account gets a real, hashed password so the
+// deployed demo can run on real auth (POST /auth/login) rather than only
+// dev-login. Documented here, not a secret — this is demo/seed data only.
+const DEMO_PASSWORD = process.env.DEMO_SEED_PASSWORD || "OWorkly-Demo-2026!";
+let demoPasswordHash = null;
+async function getDemoPasswordHash() {
+  if (!demoPasswordHash) demoPasswordHash = await argon2.hash(DEMO_PASSWORD, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+  return demoPasswordHash;
+}
 
 const CWE = "11111111-1111-1111-1111-111111111111";
 
@@ -168,6 +179,10 @@ async function upsertUser({ email, username, displayName, workerId = null }) {
     [email, displayName, workerId]
   );
   await client.query(`UPDATE app_user SET external_idp_subject = $1 WHERE user_id = $2`, [username, res.rows[0].user_id]);
+  await client.query(
+    `UPDATE app_user SET password_hash = $1, password_algo = 'argon2id', password_changed_at = now() WHERE user_id = $2 AND password_hash IS NULL`,
+    [await getDemoPasswordHash(), res.rows[0].user_id]
+  );
   return res.rows[0].user_id;
 }
 

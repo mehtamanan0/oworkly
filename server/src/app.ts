@@ -13,6 +13,7 @@ import { ApiError } from "./lib/asyncHandler.js";
 import { correlationId } from "./middleware/correlation/index.js";
 import { authenticate } from "./middleware/authentication/jwt.js";
 import { devLoginRouter } from "./middleware/authentication/devLogin.js";
+import { authRouter } from "./routes/auth.js";
 import { orgUnitsRouter } from "./routes/orgUnits.js";
 import { processesRouter } from "./routes/processes.js";
 import { skillLevelsRouter, jobRolesRouter, rolesRouter, usersRouter } from "./routes/lookups.js";
@@ -32,6 +33,7 @@ import { orgHierarchyAdminRouter } from "./routes/admin/orgHierarchy.js";
 import { processAdminRouter } from "./routes/admin/processes.js";
 import { productAdminRouter } from "./routes/admin/products.js";
 import { selfAssessmentPolicyRouter } from "./routes/admin/selfAssessmentPolicies.js";
+import { userAdminRouter } from "./routes/admin/users.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGINS }));
@@ -72,6 +74,7 @@ const v1 = express.Router();
 // ---- Unauthenticated: dev login, worker-portal identification/verification,
 // public certificate verification ----
 v1.use("/auth", devLoginRouter);
+v1.use("/auth", authRouter);
 v1.use("/worker-portal", workerPortalRouter);
 v1.use("/public", publicRouter);
 // local object-store driver only (dev/CI); 404s under a real S3/R2 driver. A
@@ -111,6 +114,7 @@ v1.use("/v2", authenticate, orgHierarchyAdminRouter);
 v1.use("/v2", authenticate, processAdminRouter);
 v1.use("/v2", authenticate, productAdminRouter);
 v1.use("/v2", authenticate, selfAssessmentPolicyRouter);
+v1.use("/v2", authenticate, userAdminRouter);
 
 app.use("/api/v1", v1);
 

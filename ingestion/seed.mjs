@@ -6,9 +6,19 @@
 // end against live data instead of just Module 1 master data.
 import { readFileSync } from "node:fs";
 import pg from "pg";
+import argon2 from "argon2";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgresql://oworkly:oworkly_dev_pw@localhost:5433/oworkly_lms";
 const client = new pg.Client({ connectionString: DATABASE_URL });
+
+// M10: real, hashed passwords for the demo role-switcher accounts below, so
+// they work with POST /auth/login (not just dev-login). Demo/seed data only.
+const DEMO_PASSWORD = process.env.DEMO_SEED_PASSWORD || "OWorkly-Demo-2026!";
+let demoPasswordHash = null;
+async function getDemoPasswordHash() {
+  if (!demoPasswordHash) demoPasswordHash = await argon2.hash(DEMO_PASSWORD, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+  return demoPasswordHash;
+}
 
 // Fixed by migration 0002/0003 — the real WTG ingestion lives entirely under
 // Chennai Wind Energy Co., re-rooted under the "WTG Daman Operations"
@@ -337,6 +347,10 @@ async function main() {
       [email, displayName, workerId]
     );
     const userId = ures.rows[0].user_id;
+    await client.query(
+      `UPDATE app_user SET password_hash = $1, password_algo = 'argon2id', password_changed_at = now() WHERE user_id = $2 AND password_hash IS NULL`,
+      [await getDemoPasswordHash(), userId]
+    );
     // org_unit_id is part of the composite PK, so it can't actually be NULL despite
     // the "NULL = whole tenant" intent in the spec comment; scope to the plant root
     // instead, which is equivalent in this single-plant demo.
