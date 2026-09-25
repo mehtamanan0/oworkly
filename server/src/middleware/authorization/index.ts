@@ -14,6 +14,19 @@ export function requireRole(...roles: string[]) {
   };
 }
 
+// M11: a coarse permission pre-check, additive to (never a replacement for)
+// requireRole/requirePlatformAdmin and the service-layer capacity checks
+// below — passes if the caller holds AT LEAST ONE of the given permission
+// codes (same OR semantics as requireRole).
+export function requirePermission(...codes: string[]) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.currentUser) return next(new ApiError(401, "Not authenticated"));
+    const ok = (req.currentUser.permissions ?? []).some((p) => codes.includes(p));
+    if (!ok) return next(new ApiError(403, `Requires one of: ${codes.join(", ")}`));
+    next();
+  };
+}
+
 // Platform-wide actions (create a company, activate/deactivate a tenant,
 // manage cross-company configuration) require the ADMIN role AND no single-
 // company scope — i.e. exactly the existing "platform admin" shape

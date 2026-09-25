@@ -8,6 +8,7 @@ import type { NextFunction, Request, Response } from "express";
 import { config } from "../../config/index.js";
 import { ApiError } from "../../lib/asyncHandler.js";
 import { validateSession } from "../../application/services/sessionService.js";
+import { resolvePermissionsForRoles } from "../../application/services/permissionService.js";
 
 export interface CurrentUser {
   userId: string;
@@ -19,6 +20,13 @@ export interface CurrentUser {
   // dev-login and worker-portal tokens, which therefore skip the revocable-
   // session check in authenticate() below entirely (unchanged behaviour).
   sessionId?: string | null;
+  // M11: resolved fresh from `roles` on every request by authenticate() --
+  // never embedded in the JWT itself, so a role/permission change takes
+  // effect on the very next request. Optional on the type only so object
+  // literals built for signAccessToken() (which never needs this field)
+  // don't have to supply it; every req.currentUser populated by
+  // authenticate() below always has a concrete array.
+  permissions?: string[];
 }
 
 declare global {
@@ -52,13 +60,16 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       const stillValid = await validateSession(sessionId);
       if (!stillValid) return next(new ApiError(401, "Session has been revoked or has expired"));
     }
+    const roles = (payload.roles as string[]) ?? [];
+    const permissions = await resolvePermissionsForRoles(roles);
     req.currentUser = {
       userId: String(payload.sub),
       companyId: (payload.companyId as string) ?? null,
-      roles: (payload.roles as string[]) ?? [],
+      roles,
       workerId: (payload.workerId as string) ?? null,
       displayName: (payload.name as string) ?? "",
       sessionId,
+      permissions,
     };
     next();
   } catch {
