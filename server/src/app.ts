@@ -35,6 +35,7 @@ import { productAdminRouter } from "./routes/admin/products.js";
 import { selfAssessmentPolicyRouter } from "./routes/admin/selfAssessmentPolicies.js";
 import { userAdminRouter } from "./routes/admin/users.js";
 import { roleAdminRouter } from "./routes/admin/roles.js";
+import { importsRouter } from "./routes/admin/imports.js";
 
 export const app = express();
 app.use(cors({ origin: config.CORS_ORIGINS }));
@@ -123,6 +124,7 @@ v1.use("/v2", authenticate, productAdminRouter);
 v1.use("/v2", authenticate, selfAssessmentPolicyRouter);
 v1.use("/v2", authenticate, userAdminRouter);
 v1.use("/v2", authenticate, roleAdminRouter);
+v1.use("/v2", authenticate, importsRouter);
 
 app.use("/api/v1", v1);
 
