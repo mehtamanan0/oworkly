@@ -1,0 +1,4 @@
+company_code,level_type_code,node_code,node_name,parent_node_code,description,active,effective_from,effective_to
+CWE,VERTICAL,SOLAR-MFG,Solar Manufacturing,,New vertical for solar panel assembly,true,,
+CWE,LOCATION,SOLAR-CHN,Chennai Plant,SOLAR-MFG,,true,,
+CWE,DEPARTMENT,SOLAR-ASM,Solar Panel Assembly,SOLAR-CHN,Panel lamination and assembly line,true,,
