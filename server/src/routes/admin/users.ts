@@ -7,7 +7,15 @@ import * as userAdmin from "../../application/services/userAdminService.js";
 
 export const userAdminRouter = Router();
 const requireUserAdmin = requireRole("ADMIN");
+const requireUserRead = requireRole("ADMIN", "LND_TEAM");
 
+userAdminRouter.get(
+  "/companies/:companyId/users",
+  requireUserRead,
+  asyncHandler(async (req, res) => {
+    res.json(await userAdmin.listUsers(req.params.companyId, req.currentUser!));
+  })
+);
 userAdminRouter.post(
   "/users/:id/deactivate",
   requireUserAdmin,

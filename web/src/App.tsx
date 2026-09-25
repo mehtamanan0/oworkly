@@ -31,6 +31,7 @@ import { AssessmentConfig } from "./pagesV2/admin/AssessmentConfig";
 import { SkillMatrixConfig } from "./pagesV2/admin/SkillMatrixConfig";
 import { ProductMaster } from "./pagesV2/admin/ProductMaster";
 import { UserManagement } from "./pagesV2/admin/UserManagement";
+import { Imports } from "./pagesV2/admin/Imports";
 
 export default function App() {
   return (
@@ -75,6 +76,11 @@ export default function App() {
       <Route path="/admin/skill-matrix-config" element={<ProtectedRoute><SkillMatrixConfig /></ProtectedRoute>} />
       <Route path="/admin/product-master" element={<ProtectedRoute><ProductMaster /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+      <Route path="/admin/imports" element={<ProtectedRoute><Imports kind="organisation" /></ProtectedRoute>} />
+      <Route path="/admin/imports/organisation" element={<ProtectedRoute><Imports kind="organisation" /></ProtectedRoute>} />
+      <Route path="/admin/imports/organisation/:batchId" element={<ProtectedRoute><Imports kind="organisation" /></ProtectedRoute>} />
+      <Route path="/admin/imports/workers" element={<ProtectedRoute><Imports kind="workers" /></ProtectedRoute>} />
+      <Route path="/admin/imports/workers/:batchId" element={<ProtectedRoute><Imports kind="workers" /></ProtectedRoute>} />
 
       {/* ---- Legacy MVP demo (pre-Figma-redesign) — kept reachable, not the default experience ---- */}
       <Route path="/legacy-mvp/*" element={<LegacyApp />} />

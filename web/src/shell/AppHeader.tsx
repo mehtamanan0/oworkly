@@ -46,6 +46,7 @@ const NAV: NavItem[] = [
       { label: "Processes & Levels", to: "/admin/processes" },
       { label: "Assessment Configuration", to: "/admin/assessments/library" },
       { label: "Skill Matrix Config", to: "/admin/skill-matrix-config" },
+      { label: "Master-Data Imports", to: "/admin/imports" },
     ],
   },
 ];

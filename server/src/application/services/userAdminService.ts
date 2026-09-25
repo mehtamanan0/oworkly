@@ -10,6 +10,22 @@ import { hashPassword } from "../../infrastructure/security/passwordService.js";
 import { revokeAllSessionsForUser } from "./sessionService.js";
 import type { CurrentUser } from "../../middleware/authentication/jwt.js";
 
+export async function listUsers(companyId: string, currentUser: CurrentUser) {
+  if (currentUser.companyId && currentUser.companyId !== companyId) {
+    throw new ApiError(403, "You may only view users within your own company");
+  }
+  return query<any>(
+    `SELECT u.user_id, u.display_name, u.email, u.is_active, u.last_success_login_at,
+            array_agg(DISTINCT r.role_code ORDER BY r.role_code) AS roles
+     FROM app_user u
+     JOIN user_role ur ON ur.user_id = u.user_id
+     JOIN role r ON r.role_id = ur.role_id
+     WHERE ur.company_id = $1
+     GROUP BY u.user_id ORDER BY u.display_name`,
+    [companyId]
+  );
+}
+
 async function assertCanManageUser(currentUser: CurrentUser, targetUserId: string) {
   if (currentUser.companyId === null) return; // platform admin manages anyone
   const rows = await query<{ company_id: string }>(`SELECT DISTINCT company_id FROM user_role WHERE user_id = $1`, [targetUserId]);

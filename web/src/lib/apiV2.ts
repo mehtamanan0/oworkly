@@ -71,6 +71,12 @@ async function request<T>(base: string, path: string, options: RequestInit & { i
 export const authApi = {
   devLogin: (username: string) => request<{ accessToken: string; user: CurrentUserV2 }>(AUTH_BASE, "/auth/dev-login", { method: "POST", body: JSON.stringify({ username }) }),
   devUsers: () => request<{ username: string; display_name: string; roles: string[]; companies: string[] }[]>(AUTH_BASE, "/auth/dev-users"),
+  login: (email: string, password: string) =>
+    request<{ accessToken: string; user: CurrentUserV2; expiresAt: string }>(AUTH_BASE, "/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  logout: () => request<{ status: string }>(AUTH_BASE, "/auth/logout", { method: "POST" }),
+  session: () => request<{ user: CurrentUserV2 }>(AUTH_BASE, "/auth/session"),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    request<{ status: string }>(AUTH_BASE, "/auth/change-password", { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) }),
 };
 
 export const workerPortalApi = {
@@ -84,6 +90,26 @@ export const v2 = {
   patch: <T>(path: string, body?: unknown) => request<T>(V2_BASE, path, { method: "PATCH", body: body !== undefined ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => request<T>(V2_BASE, path, { method: "DELETE" }),
 };
+
+// M15: multipart file upload for the import pipelines -- deliberately not
+// routed through request() above, since that always sets a JSON
+// Content-Type; a browser-built FormData needs its own multipart boundary.
+export async function uploadImportFile<T>(path: string, file: File): Promise<T> {
+  const token = getStoredToken();
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${V2_BASE}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (res.status === 401) clearSession();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ title: res.statusText }));
+    throw new ApiV2Error(res.status, body.title || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
 
 export const qual = {
   get: <T>(path: string) => request<T>(QUAL_BASE, path),
