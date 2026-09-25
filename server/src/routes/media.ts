@@ -15,6 +15,7 @@ import { pool, queryOne } from "../db.js";
 import { asyncHandler, ApiError } from "../lib/asyncHandler.js";
 import { recordAudit } from "../infrastructure/database/audit.js";
 import { config } from "../config/index.js";
+import { requirePermission } from "../middleware/authorization/index.js";
 import {
   presignUpload, presignDownload, buildStorageKey,
   localDriverActive, localWrite, localRead,
@@ -46,8 +47,14 @@ async function loadFileScoped(req: any, id: string) {
   return row;
 }
 
+// Reads (confirm/get-url) stay permission-ungated beyond authenticate() --
+// an HOD/Manager/LND_TEAM reviewing evidence during approval needs read
+// access too, and doesn't hold assessment.evaluate. Only the write action
+// (capturing new evidence, which only whoever is administering the
+// assessment does) is gated.
 mediaRouter.post(
   "/media/uploads",
+  requirePermission("assessment.evaluate"),
   asyncHandler(async (req, res) => {
     const companyId = scopedCompanyId(req);
     const kind = String(req.body?.kind ?? "").toLowerCase() as Kind;

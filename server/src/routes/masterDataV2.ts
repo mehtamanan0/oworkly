@@ -11,7 +11,7 @@ import {
 } from "../application/services/processConfigService.js";
 import { markProgress, listProgress } from "../application/services/subLevelProgressService.js";
 import * as cfg from "../application/services/assessmentConfigService.js";
-import { requireRole } from "../middleware/authorization/index.js";
+import { requireRole, requirePermission } from "../middleware/authorization/index.js";
 
 // Assessment/question authoring — content and answer keys, gated to the
 // authoring roles. (Previously ungated: any authenticated caller, including
@@ -301,6 +301,7 @@ masterDataV2Router.get(
 
 masterDataV2Router.get(
   "/workers/search",
+  requirePermission("worker.read"),
   asyncHandler(async (req, res) => {
     const companyId = req.currentUser?.companyId;
     const { q } = req.query;
@@ -339,6 +340,7 @@ masterDataV2Router.get(
 
 masterDataV2Router.get(
   "/workers/:id/profile",
+  requirePermission("worker.read"),
   asyncHandler(async (req, res) => {
     const worker = await queryOne<any>(
       `SELECT w.*, ou.name AS org_unit_name, ds.name AS data_source_name, jr.name AS designation
@@ -375,6 +377,7 @@ masterDataV2Router.get(
 
 masterDataV2Router.post(
   "/workers/:id/enroll",
+  requirePermission("worker.update"),
   asyncHandler(async (req, res) => {
     const { processId, targetProcessLevelId } = req.body;
     const row = await queryOne<any>(

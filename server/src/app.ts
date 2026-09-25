@@ -83,24 +83,30 @@ v1.use("/public", publicRouter);
 // pair stays out of the authenticated /v2 mount.
 v1.use("/v2", mediaLocalRouter);
 
-// ---- Legacy MVP demo routes (pre-date this milestone's auth model; kept
-// running, unauthenticated, exactly as before — see README "known limitations") ----
-v1.use("/org-units", orgUnitsRouter);
-v1.use("/processes", processesRouter);
-v1.use("/skill-levels", skillLevelsRouter);
-v1.use("/job-roles", jobRolesRouter);
-v1.use("/roles", rolesRouter);
-v1.use("/users", usersRouter);
-v1.use("/workers", workersRouter);
-v1.use("/skill-matrix", skillMatrixRouter);
-v1.use("/dashboard", dashboardRouter);
-v1.use("/learning-paths", learningPathsRouter);
-v1.use("/assessment-outcomes", outcomesRouter);
-v1.use("/certificates", certificatesRouter);
-v1.use("/retest-cycles", retestRouter);
-v1.use("/escalations", escalationsRouter);
-v1.use("/skill-gaps", gapAnalysisRouter);
-v1.use("/recommended-activities", recommendedActivitiesRouter);
+// ---- Legacy MVP demo routes (pre-date this milestone's auth model). M12:
+// these were mounted with ZERO auth middleware -- fully open on the public
+// internet (worker names/HRMS codes, certificates, retest cycles, etc, all
+// readable and in some cases writable with no login at all). Still actively
+// used (via /legacy-mvp/* in the frontend, LegacyApp.tsx) as the only
+// implementation of retest/escalation/gap-analysis/learning-paths, so a full
+// re-platform onto the v2 model is out of scope here -- `authenticate` closes
+// the actual hole (anonymous access) without touching any handler logic. ----
+v1.use("/org-units", authenticate, orgUnitsRouter);
+v1.use("/processes", authenticate, processesRouter);
+v1.use("/skill-levels", authenticate, skillLevelsRouter);
+v1.use("/job-roles", authenticate, jobRolesRouter);
+v1.use("/roles", authenticate, rolesRouter);
+v1.use("/users", authenticate, usersRouter);
+v1.use("/workers", authenticate, workersRouter);
+v1.use("/skill-matrix", authenticate, skillMatrixRouter);
+v1.use("/dashboard", authenticate, dashboardRouter);
+v1.use("/learning-paths", authenticate, learningPathsRouter);
+v1.use("/assessment-outcomes", authenticate, outcomesRouter);
+v1.use("/certificates", authenticate, certificatesRouter);
+v1.use("/retest-cycles", authenticate, retestRouter);
+v1.use("/escalations", authenticate, escalationsRouter);
+v1.use("/skill-gaps", authenticate, gapAnalysisRouter);
+v1.use("/recommended-activities", authenticate, recommendedActivitiesRouter);
 
 // ---- New model: real server-side auth required from here down. Namespaced
 // under /v2 so its paths never collide with the legacy MVP router registered

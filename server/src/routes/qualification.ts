@@ -2,6 +2,7 @@ import { Router } from "express";
 import { query, queryOne } from "../db.js";
 import { asyncHandler, ApiError } from "../lib/asyncHandler.js";
 import { withIdempotency } from "../infrastructure/database/idempotency.js";
+import { requirePermission } from "../middleware/authorization/index.js";
 import * as qualificationCaseService from "../application/services/qualificationCaseService.js";
 import * as approvalService from "../application/services/approvalService.js";
 import * as certificationService from "../application/services/certificationService.js";
@@ -245,8 +246,19 @@ qualificationRouter.get(
   })
 );
 
+// M12: requirePermission is added only to the routes below, where exactly
+// one caller population is legitimate and unambiguous (a coarse fail-fast
+// pre-check, additive to the fine-grained service-layer checks --
+// assertEvaluatorCapacity, the approval stage-role match, etc. -- which stay
+// exactly as they are). The routes above this comment are deliberately left
+// as authenticate()-only: several are legitimately called by BOTH a worker
+// (self-assessment) and staff (a real supervised assessment) with different
+// permission grants, and getting that OR-list wrong risks a false-negative
+// 403 on the flagship qualification journey -- left for a follow-up pass,
+// per the plan's own scoping note (see the M12 commit / final report).
 qualificationRouter.post(
   "/assessment-attempts/:id/self-assessment-review",
+  requirePermission("assessment.evaluate", "qualification.approve"),
   asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
     const result = await qualificationCaseService.reviewSelfAssessment(req.params.id, user, req.body?.outcomeNote);
@@ -264,6 +276,7 @@ qualificationRouter.get(
 
 qualificationRouter.post(
   "/qualification-cases/:id/approval/:stageSequence/act",
+  requirePermission("qualification.approve"),
   withIdempotency("qualification-cases:approval-act", asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
     const { action, remarks, clientIdempotencyKey } = req.body as { action: "approved" | "returned"; remarks?: string; clientIdempotencyKey?: string };
@@ -272,6 +285,11 @@ qualificationRouter.post(
   }))
 );
 
+// Left ungated beyond authenticate() -- existing tests show a Supervisor
+// token legitimately reaching this route's own state-machine check (a
+// certify attempt from the wrong status correctly 422s), so certify isn't
+// actually restricted to certificate.issue holders alone in this system's
+// real usage; not confident enough in the true caller set to gate safely.
 qualificationRouter.post(
   "/qualification-cases/:id/certify",
   withIdempotency("qualification-cases:certify", asyncHandler(async (req, res) => {
@@ -283,6 +301,7 @@ qualificationRouter.post(
 
 qualificationRouter.post(
   "/certificates/:id/revoke",
+  requirePermission("certificate.revoke"),
   asyncHandler(async (req, res) => {
     const user = currentUserOrThrow(req);
     await certificationService.revokeCertificate(req.params.id, req.body?.reason, user);

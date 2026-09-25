@@ -1,9 +1,21 @@
 const BASE = "/api/v1";
+// M12: these legacy MVP routes were mounted with zero auth middleware --
+// fully open on the internet -- until app.ts gained `authenticate` on all
+// of them. This client never had a token concept of its own (the "current
+// user" here was purely a client-side dropdown, no server-side session at
+// all), so it now piggybacks on the real v2 login's token -- the same
+// localStorage key apiV2.ts uses -- rather than inventing a second one.
+const V2_TOKEN_KEY = "oworkly.v2.accessToken";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem(V2_TOKEN_KEY);
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ title: res.statusText }));
